@@ -1,0 +1,16 @@
+{
+  "name": "jd-bot-service",
+  "version": "0.1.0",
+  "description": "Minimal JD creation and fetch flow bot extracted from llm-bot",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "botbuilder": "^4.22.2",
+    "restify": "^11.1.0",
+    "dotenv": "^16.4.5",
+    "mysql2": "^3.10.0"
+  }
+}
