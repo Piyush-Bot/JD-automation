@@ -44,7 +44,11 @@ const bot = new EchoBot();
 
 // Messages endpoint
 server.post('/api/messages', async (req, res) => {
+    const incomingAuth = req.headers.authorization;
     await adapter.process(req, res, async (context) => {
+        if (incomingAuth) {
+            context.turnState.set('msAuthHeader', incomingAuth);
+        }
         await bot.run(context);
     });
 });

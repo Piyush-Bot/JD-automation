@@ -268,14 +268,18 @@ class EchoBot extends ActivityHandler {
 
             const userText = (context.activity.text || '').trim();
 
-            if (/start jd process/i.test(userText)) {
+            if (/start jd (process|creation)/i.test(userText)) {
                 let allowedResp;
                 try {
+                    const msAuthHeader = context.turnState.get('msAuthHeader');
                     allowedResp = await checkMenuEligibility({
                         userId: context && context.activity && context.activity.from && context.activity.from.id,
                         conversationId: context && context.activity && context.activity.conversation && context.activity.conversation.id,
                         channelId: context && context.activity && context.activity.channelId,
-                        tenantId: context && context.activity && context.activity.channelData && context.activity.channelData.tenant && context.activity.channelData.tenant.id
+                        tenantId: context && context.activity && context.activity.channelData && context.activity.channelData.tenant && context.activity.channelData.tenant.id,
+                        serviceUrl: context && context.activity && context.activity.serviceUrl,
+                        text: userText,
+                        msAuthHeader
                     });
                 } catch (err) {
                     console.error('[bot] Eligibility check failed:', err.message || err);
@@ -284,7 +288,7 @@ class EchoBot extends ActivityHandler {
                     return;
                 }
 
-                if (!allowedResp || allowedResp.allowed !== true) {
+                if (!allowedResp || allowedResp.allowed !== true || (allowedResp.intent && allowedResp.intent !== 'JD_CREATE')) {
                     await context.sendActivity(MessageFactory.text((allowedResp && allowedResp.reason) || 'You are not allowed to start the JD process at this time.'));
                     await next();
                     return;

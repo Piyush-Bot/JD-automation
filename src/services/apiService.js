@@ -11,16 +11,37 @@ const {
 // When ready, replace the fallbacks below with HTTP calls to your deployed server.
 // You can use process.env.API_BASE_URL and process.env.API_TOKEN if needed.
 
+const { getGatewayAccessToken } = require('./tokenClient');
+
 async function checkMenuEligibility(ctx) {
-  // ADD YOUR DEPLOYED ENDPOINT HERE (gating when user types "start jd process")
-  // Example:
-  //   const res = await fetch(`${process.env.API_BASE_URL}/bot/jd/eligibility`, {
-  //     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.API_TOKEN}` },
-  //     body: JSON.stringify(ctx)
-  //   });
-  //   const data = await res.json();
-  //   return { allowed: !!data.allowed, reason: data.message };
-  // Fallback: always allow
+  if (process.env.API_BASE_URL) {
+    try {
+      const aadToken = await getGatewayAccessToken().catch(() => null);
+      const res = await fetch(`${process.env.API_BASE_URL}/bot/jd/eligibility`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(ctx && ctx.msAuthHeader ? { 'X-Forwarded-Authorization': ctx.msAuthHeader } : {}),
+          'X-Microsoft-AppId': process.env.MicrosoftAppId || '',
+          ...(aadToken ? { Authorization: `Bearer ${aadToken}` } : {}),
+          ...(!aadToken && process.env.API_TOKEN ? { Authorization: `Bearer ${process.env.API_TOKEN}` } : {})
+        },
+        body: JSON.stringify({
+          userId: ctx && ctx.userId,
+          tenantId: ctx && ctx.tenantId,
+          channelId: ctx && ctx.channelId,
+          conversationId: ctx && ctx.conversationId,
+          serviceUrl: ctx && ctx.serviceUrl,
+          intent: 'check_menu_eligibility',
+          text: ctx && ctx.text
+        })
+      });
+      const data = await res.json();
+      return { allowed: !!(data && data.allowed), intent: data && data.intent, reason: data && data.message };
+    } catch (e) {
+      return { allowed: false, reason: 'eligibility check failed' };
+    }
+  }
   return { allowed: true };
 }
 
