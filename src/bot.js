@@ -7,7 +7,8 @@ const {
     buildJdCreationFormCard,
     buildJdFormConfirmCard,
     buildFetchIndentFilterCard,
-    buildIndentJobMasterCard
+    buildIndentJobMasterCard,
+    buildEditFormCard
 } = require('./services/jdCardService');
 
 const {
@@ -149,29 +150,61 @@ async function handleCardAction(context) {
         break;
     }
 
-    // Dummy edit buttons from the "Fetch JD" results card
     case 'edit_all':
-        await context.sendActivity(MessageFactory.text('Dummy: Edit All (not implemented yet).'));
-        break;
     case 'edit_skills':
-        await context.sendActivity(MessageFactory.text('Dummy: Edit Skills (not implemented yet).'));
-        break;
     case 'edit_education':
-        await context.sendActivity(MessageFactory.text('Dummy: Edit Education (not implemented yet).'));
-        break;
     case 'edit_comp':
-        await context.sendActivity(MessageFactory.text('Dummy: Edit Comp (not implemented yet).'));
-        break;
     case 'edit_experience':
-        await context.sendActivity(MessageFactory.text('Dummy: Edit Experience (not implemented yet).'));
+        await context.sendActivity({ attachments: [buildEditFormCard(action)] });
         break;
+
+    case 'card_close': {
+        const targetId = context.activity.replyToId || context.activity.id;
+        if (!targetId) {
+            return;
+        }
+        try {
+            // Delete the message that contains the card
+            await context.deleteActivity(targetId);
+        } catch (err) {
+            // Fallback: replace with a tiny stub so the large card disappears
+            try {
+                await context.updateActivity({
+                    id: targetId,
+                    type: 'message',
+                    conversation: context.activity.conversation,
+                    attachments: [],
+                    text: 'Card closed.'
+                });
+            } catch (_ignore) {
+                // Silent no-op if update also fails
+            }
+        }
+        return;
+    }
+
+    case 'edit_form_submit': {
+        const label = value.label || '';
+        const description = value.description || '';
+        const editType = value.editType || '';
+        if (!label || !description) {
+            await context.sendActivity(MessageFactory.text('Please fill in both Label and Description before saving.'));
+            return;
+        }
+        await context.sendActivity(MessageFactory.text(`✅ Saved [${editType}] — Label: "${label}", Description: "${description}"`));
+        break;
+    }
 
     case 'fetch_indent_submit': {
         const departmentId = value.departmentId;
         const roleId = value.roleId;
 
-        if (!departmentId || !roleId) {
-            await context.sendActivity(MessageFactory.text('Please select Department and Role before submitting.'));
+        const missing = [
+            !departmentId && 'Department',
+            !roleId && 'Role'
+        ].filter(Boolean);
+        if (missing.length > 0) {
+            await context.sendActivity(MessageFactory.text(`Please select the following before submitting: **${missing.join(', ')}**.`));
             return;
         }
 
@@ -197,8 +230,15 @@ async function handleCardAction(context) {
         const reviewerId = value.reviewerId;
         const approverId = value.approverId;
 
-        if (!deptId || !roleId || !originatorId || !reviewerId || !approverId) {
-            await context.sendActivity(MessageFactory.text('Please select all dropdown values before submitting.'));
+        const missing = [
+            !deptId && 'Department',
+            !roleId && 'Role',
+            !originatorId && 'Originator',
+            !reviewerId && 'Reviewer',
+            !approverId && 'Approver'
+        ].filter(Boolean);
+        if (missing.length > 0) {
+            await context.sendActivity(MessageFactory.text(`Please select the following before submitting: **${missing.join(', ')}**.`));
             return;
         }
 

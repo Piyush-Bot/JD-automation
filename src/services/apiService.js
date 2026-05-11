@@ -17,28 +17,36 @@ async function checkMenuEligibility(ctx) {
   if (process.env.API_BASE_URL) {
     try {
       const aadToken = await getGatewayAccessToken().catch(() => null);
-      const res = await fetch(`${process.env.API_BASE_URL}/bot/jd/eligibility`, {
+      const url = `${process.env.API_BASE_URL}/bot/jd/eligibility`;
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(ctx && ctx.msAuthHeader ? { 'X-Forwarded-Authorization': ctx.msAuthHeader } : {}),
+        'X-Microsoft-AppId': process.env.MicrosoftAppId || '',
+        ...(aadToken ? { Authorization: `Bearer ${aadToken}` } : {}),
+        ...(!aadToken && process.env.API_TOKEN ? { Authorization: `Bearer ${process.env.API_TOKEN}` } : {})
+      };
+      const body = {
+        userId: ctx && ctx.userId,
+        tenantId: ctx && ctx.tenantId,
+        channelId: ctx && ctx.channelId,
+        conversationId: ctx && ctx.conversationId,
+        serviceUrl: ctx && ctx.serviceUrl,
+        text: ctx && ctx.text
+      };
+      const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(ctx && ctx.msAuthHeader ? { 'X-Forwarded-Authorization': ctx.msAuthHeader } : {}),
-          'X-Microsoft-AppId': process.env.MicrosoftAppId || '',
-          ...(aadToken ? { Authorization: `Bearer ${aadToken}` } : {}),
-          ...(!aadToken && process.env.API_TOKEN ? { Authorization: `Bearer ${process.env.API_TOKEN}` } : {})
-        },
-        body: JSON.stringify({
-          userId: ctx && ctx.userId,
-          tenantId: ctx && ctx.tenantId,
-          channelId: ctx && ctx.channelId,
-          conversationId: ctx && ctx.conversationId,
-          serviceUrl: ctx && ctx.serviceUrl,
-          intent: 'check_menu_eligibility',
-          text: ctx && ctx.text
-        })
+        headers,
+        body: JSON.stringify(body)
       });
-      const data = await res.json();
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (_) {
+        data = null;
+      }
       return { allowed: !!(data && data.allowed), intent: data && data.intent, reason: data && data.message };
     } catch (e) {
+      console.error('[apiService] checkMenuEligibility error', e && e.message ? e.message : e);
       return { allowed: false, reason: 'eligibility check failed' };
     }
   }

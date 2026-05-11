@@ -56,18 +56,24 @@ function buildJdCreationFormCard(departments, roles, members) {
     const card = {
         type: 'AdaptiveCard', $schema: 'http://adaptivecards.io/schemas/adaptive-card.json', version: '1.4', msteams: { width: 'Full' },
         body: [
-            { type: 'TextBlock', text: 'JD Creation', weight: 'Bolder', size: 'Large', wrap: true },
+            {
+                type: 'ColumnSet',
+                columns: [
+                    { type: 'Column', width: 'stretch', items: [{ type: 'TextBlock', text: 'JD Creation', weight: 'Bolder', size: 'Large', wrap: true }] },
+                    { type: 'Column', width: 'auto', items: [{ type: 'ActionSet', actions: [{ type: 'Action.Submit', title: '✕', data: { action: 'card_close' } }] }] }
+                ]
+            },
             { type: 'TextBlock', text: 'Select Department, Role and the workflow participants, then submit.', wrap: true, spacing: 'Small' },
             { type: 'TextBlock', text: 'Department:', wrap: true, spacing: 'Medium' },
-            { type: 'Input.ChoiceSet', id: 'deptId', style: 'compact', isRequired: true, errorMessage: 'Please select a department.', placeholder: '-- Choose Department --', choices: deptChoices },
+            { type: 'Input.ChoiceSet', id: 'deptId', style: 'compact', placeholder: '-- Choose Department --', choices: deptChoices },
             { type: 'TextBlock', text: 'Role:', wrap: true, spacing: 'Medium' },
-            { type: 'Input.ChoiceSet', id: 'roleId', style: 'compact', isRequired: true, errorMessage: 'Please select a role.', placeholder: '-- Choose Role --', choices: roleChoices },
+            { type: 'Input.ChoiceSet', id: 'roleId', style: 'compact', placeholder: '-- Choose Role --', choices: roleChoices },
             { type: 'TextBlock', text: 'Originator:', wrap: true, spacing: 'Medium' },
-            { type: 'Input.ChoiceSet', id: 'originatorId', style: 'compact', isRequired: true, errorMessage: 'Please select an originator.', placeholder: '-- Choose Originator --', choices: memberChoices },
+            { type: 'Input.ChoiceSet', id: 'originatorId', style: 'compact', placeholder: '-- Choose Originator --', choices: memberChoices },
             { type: 'TextBlock', text: 'Reviewer:', wrap: true, spacing: 'Medium' },
-            { type: 'Input.ChoiceSet', id: 'reviewerId', style: 'compact', isRequired: true, errorMessage: 'Please select a reviewer.', placeholder: '-- Choose Reviewer --', choices: memberChoices },
+            { type: 'Input.ChoiceSet', id: 'reviewerId', style: 'compact', placeholder: '-- Choose Reviewer --', choices: memberChoices },
             { type: 'TextBlock', text: 'Approver:', wrap: true, spacing: 'Medium' },
-            { type: 'Input.ChoiceSet', id: 'approverId', style: 'compact', isRequired: true, errorMessage: 'Please select an approver.', placeholder: '-- Choose Approver --', choices: memberChoices }
+            { type: 'Input.ChoiceSet', id: 'approverId', style: 'compact', placeholder: '-- Choose Approver --', choices: memberChoices }
         ],
         actions: [{ type: 'Action.Submit', title: '✅ Submit', data: { action: 'jd_form_submit' } }]
     };
@@ -137,6 +143,53 @@ function buildConfirmCard(deptName, roleName) {
     return CardFactory.adaptiveCard(card);
 }
 
+const EDIT_TYPE_LABELS = {
+    edit_all: 'Edit All',
+    edit_skills: 'Edit Skills',
+    edit_education: 'Edit Education',
+    edit_comp: 'Edit Comp',
+    edit_experience: 'Edit Experience'
+};
+
+function buildEditFormCard(editType) {
+    const title = EDIT_TYPE_LABELS[editType] || 'Edit';
+    const card = {
+        type: 'AdaptiveCard',
+        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+        version: '1.4',
+        msteams: { width: 'Full' },
+        body: [
+            {
+                type: 'ColumnSet',
+                columns: [
+                    {
+                        type: 'Column',
+                        width: 'stretch',
+                        items: [{ type: 'TextBlock', text: title, weight: 'Bolder', size: 'Medium', wrap: true }]
+                    },
+                    {
+                        type: 'Column',
+                        width: 'auto',
+                        items: [{
+                            type: 'ActionSet',
+                            actions: [{ type: 'Action.Submit', title: '✕', data: { action: 'card_close' } }]
+                        }]
+                    }
+                ]
+            },
+            { type: 'TextBlock', text: 'Label:', wrap: true, spacing: 'Medium' },
+            { type: 'Input.Text', id: 'label', placeholder: 'Enter label...' },
+            { type: 'TextBlock', text: 'Description:', wrap: true, spacing: 'Medium' },
+            { type: 'Input.Text', id: 'description', placeholder: 'Enter description...', isMultiline: true },
+            { type: 'Input.Text', id: 'editType', value: editType, isVisible: false }
+        ],
+        actions: [
+            { type: 'Action.Submit', title: '✅ Save', data: { action: 'edit_form_submit' } }
+        ]
+    };
+    return CardFactory.adaptiveCard(card);
+}
+
 function buildFetchIndentFilterCard(departments, roles) {
     const deptChoices = (departments || []).map((d) => ({ title: d.name, value: String(d.id) }));
     const roleChoices = (roles || []).map((r) => ({ title: r.name, value: String(r.id) }));
@@ -144,12 +197,18 @@ function buildFetchIndentFilterCard(departments, roles) {
     const card = {
         type: 'AdaptiveCard', $schema: 'http://adaptivecards.io/schemas/adaptive-card.json', version: '1.4', msteams: { width: 'Full' },
         body: [
-            { type: 'TextBlock', text: 'Fetch JD', weight: 'Bolder', size: 'Large', wrap: true },
+            {
+                type: 'ColumnSet',
+                columns: [
+                    { type: 'Column', width: 'stretch', items: [{ type: 'TextBlock', text: 'Fetch JD', weight: 'Bolder', size: 'Large', wrap: true }] },
+                    { type: 'Column', width: 'auto', items: [{ type: 'ActionSet', actions: [{ type: 'Action.Submit', title: '✕', data: { action: 'card_close' } }] }] }
+                ]
+            },
             { type: 'TextBlock', text: 'Choose Department and Role, then submit to fetch filtered JD records.', wrap: true, spacing: 'Small' },
             { type: 'TextBlock', text: 'Department:', wrap: true, spacing: 'Medium' },
-            { type: 'Input.ChoiceSet', id: 'departmentId', style: 'compact', isRequired: true, errorMessage: 'Please select a department.', placeholder: '-- Choose Department --', choices: deptChoices },
+            { type: 'Input.ChoiceSet', id: 'departmentId', style: 'compact', placeholder: '-- Choose Department --', choices: deptChoices },
             { type: 'TextBlock', text: 'Role:', wrap: true, spacing: 'Medium' },
-            { type: 'Input.ChoiceSet', id: 'roleId', style: 'compact', isRequired: true, errorMessage: 'Please select a role.', placeholder: '-- Choose Role --', choices: roleChoices }
+            { type: 'Input.ChoiceSet', id: 'roleId', style: 'compact', placeholder: '-- Choose Role --', choices: roleChoices }
         ],
         actions: [{ type: 'Action.Submit', title: '✅ Submit', data: { action: 'fetch_indent_submit' } }]
     };
@@ -176,7 +235,13 @@ const INDENT_CARD_MAX_ROWS = 12;
 
 function buildIndentJobMasterCard(rows) {
     const body = [
-        { type: 'TextBlock', text: 'JD — Job master', weight: 'Bolder', size: 'Large', wrap: true },
+        {
+            type: 'ColumnSet',
+            columns: [
+                { type: 'Column', width: 'stretch', items: [{ type: 'TextBlock', text: 'JD — Job master', weight: 'Bolder', size: 'Large', wrap: true }] },
+                { type: 'Column', width: 'auto', items: [{ type: 'ActionSet', actions: [{ type: 'Action.Submit', title: '✕', data: { action: 'card_close' } }] }] }
+            ]
+        },
         { type: 'TextBlock', text: rows.length === 0 ? 'No records found.' : `${rows.length} record(s) loaded from database.`, wrap: true, spacing: 'Small', isSubtle: true }
     ];
 
@@ -232,5 +297,6 @@ module.exports = {
     buildJdCreationFormCard,
     buildJdFormConfirmCard,
     buildFetchIndentFilterCard,
-    buildIndentJobMasterCard
+    buildIndentJobMasterCard,
+    buildEditFormCard
 };
