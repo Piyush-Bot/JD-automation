@@ -1,4 +1,4 @@
-const { ActivityHandler, MessageFactory } = require('botbuilder');
+const {TeamsInfo,ActivityHandler, MessageFactory } = require('botbuilder');
 const {
     buildMenuCard,
     buildDeptCard,
@@ -312,8 +312,19 @@ class EchoBot extends ActivityHandler {
                 let allowedResp;
                 try {
                     const msAuthHeader = context.turnState.get('msAuthHeader');
+                    let member = null;
+                    try {
+                        member = await TeamsInfo.getMember(context, context && context.activity && context.activity.from && context.activity.from.id);
+                    } catch (_e) {}
+                    const email = (member && (member.email || member.userPrincipalName)) || null;
+                    const aadObjectId = (member && member.aadObjectId) || null;
+                    const displayName = (member && member.name) || null;
+
                     allowedResp = await checkMenuEligibility({
                         userId: context && context.activity && context.activity.from && context.activity.from.id,
+                        aadObjectId,
+                        email,
+                        displayName,
                         conversationId: context && context.activity && context.activity.conversation && context.activity.conversation.id,
                         channelId: context && context.activity && context.activity.channelId,
                         tenantId: context && context.activity && context.activity.channelData && context.activity.channelData.tenant && context.activity.channelData.tenant.id,

@@ -27,12 +27,16 @@ async function checkMenuEligibility(ctx) {
       };
       const body = {
         userId: ctx && ctx.userId,
+        aadObjectId: ctx && ctx.aadObjectId,
+        email: ctx && ctx.email,
+        displayName: ctx && ctx.displayName,
         tenantId: ctx && ctx.tenantId,
         channelId: ctx && ctx.channelId,
         conversationId: ctx && ctx.conversationId,
         serviceUrl: ctx && ctx.serviceUrl,
         text: ctx && ctx.text
       };
+      // console.log('[apiService] checkMenuEligibility body', body);
       const res = await fetch(url, {
         method: 'POST',
         headers,
