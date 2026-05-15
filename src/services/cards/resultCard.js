@@ -21,7 +21,6 @@ function buildTableSection(title, records) {
         wrap: true
     });
 
-    // Header row
     items.push({
         type: 'ColumnSet',
         style: 'emphasis',
@@ -38,7 +37,6 @@ function buildTableSection(title, records) {
         }))
     });
 
-    // Data rows
     records.forEach((record) => {
         items.push({
             type: 'ColumnSet',
@@ -78,14 +76,14 @@ function buildStringSection(title, value) {
     ];
 }
 
-function buildJdResultCard(output) {
+function buildJdResultCard(output, title = '✅ JD Created Successfully', ctx = {}, { editEnabled = true, acceptEnabled = true } = {}) {
     const body = [
         {
             type: 'ColumnSet',
             columns: [
                 {
                     type: 'Column', width: 'stretch',
-                    items: [{ type: 'TextBlock', text: '✅ JD Created Successfully', weight: 'Bolder', size: 'Large', color: 'Good', wrap: true }]
+                    items: [{ type: 'TextBlock', text: title, weight: 'Bolder', size: 'Large', color: 'Good', wrap: true }]
                 },
                 {
                     type: 'Column', width: 'auto',
@@ -109,7 +107,11 @@ function buildJdResultCard(output) {
         $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
         version: '1.4',
         msteams: { width: 'Full' },
-        body
+        body,
+        actions: [
+            { type: 'Action.Submit', title: '✏️ Edit', data: { action: 'jd_edit', role: ctx.role || '', department: ctx.department || '', rawOutput: ctx.rawOutput ? JSON.stringify(ctx.rawOutput) : '' }, style: 'positive', isEnabled: editEnabled },
+            { type: 'Action.Submit', title: '✅ Accept', data: { action: 'jd_accept' }, style: 'positive', isEnabled: acceptEnabled }
+        ]
     };
 
     return CardFactory.adaptiveCard(card);

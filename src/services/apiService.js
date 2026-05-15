@@ -14,7 +14,6 @@ function formatAuthHeader(token) {
 async function loginAndGetToken(email) {
   const url = `${DB_API}/login`;
   const loginBody = { user_email: email };
-  console.log('[apiService] login request', { url, body: loginBody });
   let res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -27,13 +26,8 @@ async function loginAndGetToken(email) {
     body: JSON.stringify(loginBody)
   });
   if (!res.ok) {
-    let errText = null;
-    try { errText = await res.text(); } catch (_) { errText = null; }
-    console.warn('[apiService] login JSON failed, retrying as form-urlencoded', { status: res.status, body: errText });
-
     // Retry using application/x-www-form-urlencoded to mimic alternate clients
     const form = new URLSearchParams({ user_email: email });
-    console.log('[apiService] login request (form)', { url, body: form.toString() });
     res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -47,9 +41,6 @@ async function loginAndGetToken(email) {
     });
 
     if (!res.ok) {
-      let errText2 = null;
-      try { errText2 = await res.text(); } catch (_) { errText2 = null; }
-      console.error('[apiService] login failed (form)', { status: res.status, body: errText2 });
       throw new Error(`login failed: ${res.status}`);
     }
   }
@@ -70,7 +61,6 @@ async function getApiHeaders(email) {
   if (!DB_API) return { 'Content-Type': 'application/json' };
   const loginEmail = (email || process.env.API_LOGIN_EMAIL_FALLBACK || '').trim();
   if (!loginEmail) throw new Error('No email available for API login. Set API_LOGIN_EMAIL_FALLBACK in .env');
-  console.log('[apiService] getApiHeaders loginEmail', loginEmail);
   let token = tokenCacheByEmail.get(loginEmail);
   if (!token) {
     token = await loginAndGetToken(loginEmail);
@@ -97,9 +87,7 @@ async function apiGet(path, email) {
 
 async function loginForDataApi(email) {
   if (!DB_API) throw new Error('DB_API_BASE_URL not configured');
-  console.log('[apiService] login');
   await getApiHeaders(email);
-  console.log('[apiService] login success');
 }
 
 function normalizeList(data, idKeys = ['id'], nameKeys = ['name']) {
@@ -148,13 +136,11 @@ async function checkMenuEligibility(ctx) {
       let data = null;
       try {
         data = await res.json();
-        console.log('[apiService] checkMenuEligibility response', { status: res.status, ok: res.ok, data });
       } catch (_) {
         data = null;
       }
       return { allowed: !!(data && data.allowed), intent: data && data.intent, reason: data && data.message };
     } catch (e) {
-      console.error('[apiService] checkMenuEligibility error', e && e.message ? e.message : e);
       return { allowed: false, reason: 'eligibility check failed' };
     }
   }
@@ -163,16 +149,13 @@ async function checkMenuEligibility(ctx) {
 
 async function getDepartments(email) {
   if (!DB_API) throw new Error('DB_API_BASE_URL not configured');
-  console.log('[apiService] getDepartments');
   const data = await apiGet('/departments', email);
   const list = normalizeList(data, ['id', 'department_id', 'value', 'Id'], ['department', 'name', 'department_name', 'title', 'Name']);
-  console.log('[apiService] departments count', list.length, 'sample', list[0]);
   return list;
 }
 
 async function getRolesByDepartment(departmentId, email) {
   if (!DB_API) throw new Error('DB_API_BASE_URL not configured');
-  console.log('[apiService] getRolesByDepartment');
   const raw = await apiGet('/roles', email);
   let arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []);
   // If departmentId is provided and API returns dept linkage, try to filter client-side
@@ -182,13 +165,11 @@ async function getRolesByDepartment(departmentId, email) {
     if (filtered.length) arr = filtered;
   }
   const list = normalizeList(arr, ['id', 'role_id', 'value', 'Id'], ['role', 'role_name', 'name', 'title', 'Name']);
-  console.log('[apiService] roles count', list.length, 'sample', list[0]);
   return list;
 }
 
 async function getCollabMembers(email) {
   if (!DB_API) throw new Error('DB_API_BASE_URL not configured');
-  console.log('[apiService] getCollabMembers');
   const raw = await apiGet('/originators', email);
   const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []);
   const out = arr.map((m) => {
@@ -197,48 +178,53 @@ async function getCollabMembers(email) {
     const id = m && (m.id ?? m.user_id ?? m.Id);
     return { id: id != null ? String(id) : '', name };
   }).filter((i) => i.id && i.name);
-  console.log('[apiService] members count', out.length, 'sample', out[0]);
   return out;
 }
 
-
-async function getJobMasterForIndentByFilters(roleId, departmentId, limit) {
-  // TODO: Replace with deployed endpoint when provided
-  console.log('[apiService] getJobMasterForIndentByFilters (dummy)');
-  void roleId; void departmentId; void limit;
-  return [];
-}
-
-async function createJD(payload, email) {
-  const body = { email, ...payload };
-  console.log('[apiService] createJD payload', body);
-  const url = `${DB_API}/workflow-payload`;
-  // 'http://localhost:8000/workflow-payload'
+async function getJdByRoleAndDept(roleId, departmentId, email) {
+  if (!DB_API) throw new Error('DB_API_BASE_URL not configured');
+  const url = `${DB_API}/job-description?role_id=${encodeURIComponent(roleId)}&department_id=${encodeURIComponent(departmentId)}`;
   const headers = await getApiHeaders(email);
-  console.log('[apiService] createJD request', { url, body });
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  const res = await fetch(url, { method: 'GET', headers });
   const resText = await res.text().catch(() => null);
-  console.log('[apiService] createJD response', {
-    status: res.status,
-    ok: res.ok,
-    headers: Object.fromEntries(res.headers.entries()),
-    body: resText
-  });
   if (!res.ok) {
-    console.error('[apiService] createJD failed', { status: res.status, body: resText });
     return { ok: false, error: `API error: ${res.status}` };
   }
   let data = null;
   try { data = JSON.parse(resText); } catch (_) { data = null; }
-  console.log('[apiService] createJD raw data', JSON.stringify(data, null, 2));
-  const output = (data && data.workflow_result && data.workflow_result[0] && data.workflow_result[0].output)
-    || (Array.isArray(data) ? (data[0] && data[0].output) : (data && data.output));
-  console.log('[apiService] createJD extracted output', JSON.stringify(output, null, 2));
-  if (output && typeof output === 'object') {
-    console.log('[apiService] createJD output table:');
-    console.table(output);
+  const output = data && data.records && data.records[0] && data.records[0].output && data.records[0].output[0] && data.records[0].output[0].output;
+  return { ok: true, output: output || {}, raw: data };
+}
+
+async function triggerJdWorkflow(payload, email) {
+  if (!DB_API) throw new Error('DB_API_BASE_URL not configured');
+  const url = `${DB_API}/trigger-jd-workflow`;
+  const headers = await getApiHeaders(email);
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+  const resText = await res.text().catch(() => null);
+  if (!res.ok) {
+    return { ok: false, error: `API error: ${res.status}` };
   }
-  return { ok: true, output: output || {} };
+  let data = null;
+  try { data = JSON.parse(resText); } catch (_) { data = null; }
+  const output = data && data.workflow_response && data.workflow_response.output;
+  return { ok: true, output: output || {}, raw: data };
+}
+
+async function createJD(payload, email) {
+  const body = { email, ...payload };
+  const url = `${DB_API}/workflow-payload`;
+  const headers = await getApiHeaders(email);
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  const resText = await res.text().catch(() => null);
+  if (!res.ok) {
+    return { ok: false, error: `API error: ${res.status}` };
+  }
+  let data = null;
+  try { data = JSON.parse(resText); } catch (_) { data = null; }
+  const output = (data && data.workflow_result && data.workflow_result.response && data.workflow_result.response[0])
+    || (Array.isArray(data) ? (data[0] && data[0].output) : (data && data.output));
+  return { ok: true, output: output || {}, raw: data };
 }
 
 module.exports = {
@@ -247,6 +233,7 @@ module.exports = {
   getDepartments,
   getRolesByDepartment,
   getCollabMembers,
-  getJobMasterForIndentByFilters,
+  getJdByRoleAndDept,
+  triggerJdWorkflow,
   createJD
 };

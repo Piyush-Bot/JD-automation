@@ -1,16 +1,11 @@
 const { TeamsInfo, ActivityHandler, MessageFactory } = require('botbuilder');
-const { buildJdResultCard } = require('./services/jdResultService');
 const {
     buildMenuCard,
-    buildDeptCard,
-    buildRoleCard,
-    buildConfirmCard,
     buildJdCreatFormCard,
-    buildJdFormConfirmCard,
     buildJdEditCard,
-    buildIndentJobMasterCard,
-    buildEditFormCard
-} = require('./services/jdCardService');
+    buildEditFormCard,
+    buildJdResultCard
+} = require('./services/cards/cardIndex');
 
 const {
     checkMenuEligibility,
@@ -18,9 +13,28 @@ const {
     getDepartments,
     getRolesByDepartment,
     getCollabMembers,
-    getJobMasterForIndentByFilters,
+    getJdByRoleAndDept,
+    triggerJdWorkflow,
     createJD
 } = require('./services/apiService');
+
+async function closeSourceCard(context) {
+    const targetId = context.activity.replyToId || context.activity.id;
+    if (!targetId) return;
+    try {
+        await context.deleteActivity(targetId);
+    } catch (_) {
+        try {
+            await context.updateActivity({
+                id: targetId,
+                type: 'message',
+                conversation: context.activity.conversation,
+                attachments: [],
+                text: '✅ Submitted.'
+            });
+        } catch (_ignore) {}
+    }
+}
 
 async function handleCardAction(context) {
     const value = context.activity.value || {};
@@ -42,12 +56,11 @@ async function handleCardAction(context) {
         let members;
         try {
             // Ensure login first so downstream calls reuse the token
-            await require('./services/apiService').loginForDataApi(userEmail);
+            await loginForDataApi(userEmail);
             departments = await getDepartments(userEmail);
             roles = await getRolesByDepartment(undefined, userEmail);
             members = await getCollabMembers(userEmail);
         } catch (err) {
-            console.error('[bot] Failed to load JD form dropdown data from DB:', err.message || err);
             await context.sendActivity(
                 MessageFactory.text('Sorry, could not load JD form data. Please check the database connection and tables.')
             );
@@ -65,72 +78,14 @@ async function handleCardAction(context) {
         break;
     }
 
-    case 'dept_selected': {
-        const deptId = value.deptId;
-        if (!deptId) {
-            await context.sendActivity(MessageFactory.text('Please select a department before continuing.'));
-            return;
-        }
-
-        // Resolve department name by fetching all depts and finding the selected one
-        let departments;
-        try {
-            departments = await getDepartments(userEmail);
-        } catch (err) {
-            console.error('[bot] Failed to load departments from DB:', err.message || err);
-            await context.sendActivity(MessageFactory.text('Sorry, could not load departments. Please check the database connection.'));
-            return;
-        }
-        const selectedDept = departments.find((d) => String(d.id) === String(deptId));
-        const deptName = selectedDept ? selectedDept.name : deptId;
-
-        let roles;
-        try {
-            roles = await getRolesByDepartment(deptId, userEmail);
-        } catch (err) {
-            console.error('[bot] Failed to load roles from DB:', err.message || err);
-            await context.sendActivity(MessageFactory.text('Sorry, could not load roles. Please check the database connection.'));
-            return;
-        }
-        if (!roles || roles.length === 0) {
-            await context.sendActivity(MessageFactory.text(`No roles found for the department "${deptName}".`));
-            return;
-        }
-        await context.sendActivity({ attachments: [buildRoleCard(deptId, deptName, roles)] });
-        break;
-    }
-
-    case 'jd_submit': {
-        const deptName = value.deptName || value.deptId || 'Unknown';
-        const roleId = value.roleId;
-
-        if (!roleId) {
-            await context.sendActivity(MessageFactory.text('Please select a role before submitting.'));
-            return;
-        }
-
-        // Resolve role name
-        let roles;
-        try {
-            roles = await getRolesByDepartment(value.deptId, userEmail);
-        } catch (err) {
-            console.error('[bot] Failed to load roles from DB:', err.message || err);
-        }
-        const selectedRole = roles && roles.find((r) => String(r.id) === String(roleId));
-        const roleName = selectedRole ? selectedRole.name : roleId;
-
-        await context.sendActivity({ attachments: [buildConfirmCard(deptName, roleName)] });
-        break;
-    }
-
     case 'fetch_indent': {
         let departments;
         let roles;
         try {
+            await loginForDataApi(userEmail);
             departments = await getDepartments(userEmail);
             roles = await getRolesByDepartment(undefined, userEmail);
         } catch (err) {
-            console.error('[bot] Failed to load fetch-jd dropdown data from DB:', err.message || err);
             await context.sendActivity(
                 MessageFactory.text('Sorry, could not load department/role data for fetch-jd. Please check the database connection and tables.')
             );
@@ -148,13 +103,15 @@ async function handleCardAction(context) {
         break;
     }
 
-    case 'edit_all':
-    case 'edit_skills':
-    case 'edit_education':
-    case 'edit_comp':
-    case 'edit_experience':
-        await context.sendActivity({ attachments: [buildEditFormCard(action)] });
+    case 'jd_edit': {
+        const ctx = {
+            role: value.role || '',
+            department: value.department || '',
+            rawOutput: value.rawOutput || ''
+        };
+        await context.sendActivity({ attachments: [buildEditFormCard(ctx)] });
         break;
+    }
 
     case 'card_close': {
         const targetId = context.activity.replyToId || context.activity.id;
@@ -182,14 +139,52 @@ async function handleCardAction(context) {
     }
 
     case 'edit_form_submit': {
-        const label = value.label || '';
+        const editTypes = value.editTypes || '';
         const description = value.description || '';
-        const editType = value.editType || '';
-        if (!label || !description) {
-            await context.sendActivity(MessageFactory.text('Please fill in both Label and Description before saving.'));
+        if (!editTypes || !description) {
+            await context.sendActivity(MessageFactory.text('Please select at least one Edit Type and enter a Description before submitting.'));
             return;
         }
-        await context.sendActivity(MessageFactory.text(`✅ Saved [${editType}] — Label: "${label}", Description: "${description}"`));
+        const typeLabels = editTypes.split(',').map((t) => t.trim()).filter(Boolean).join(', ');
+        const prompt = `Edit Type: ${typeLabels}, Description: ${description}`;
+
+        let rawOutput = null;
+        try { rawOutput = value.rawOutput ? JSON.parse(value.rawOutput) : null; } catch (_) { rawOutput = null; }
+
+        const editPayload = {
+            role: value.role || '',
+            department: value.department || '',
+            location: process.env.DEFAULT_LOCATION || 'Bangalore',
+            prompt,
+            output: rawOutput
+        };
+        const loadingMsg = await context.sendActivity(MessageFactory.text('⏳ Updating JD...'));
+        let editRes;
+        try {
+            editRes = await triggerJdWorkflow(editPayload, userEmail);
+        } catch (err) {
+            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
+            await context.sendActivity(MessageFactory.text('Sorry, could not update JD. Please try again.'));
+            return;
+        }
+
+        if (!editRes || editRes.ok !== true) {
+            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
+            await context.sendActivity(MessageFactory.text((editRes && editRes.error) ? `Failed to update JD: ${editRes.error}` : 'Sorry, could not update JD.'));
+            return;
+        }
+
+        const triggerRawOutput = editRes.raw && editRes.raw.workflow_response
+            ? [{ output: editRes.raw.workflow_response.output }]
+            : null;
+        const triggerCtx = {
+            role: value.role || '',
+            department: value.department || '',
+            rawOutput: triggerRawOutput
+        };
+        await context.sendActivity({ attachments: [buildJdResultCard(editRes.output, '✅ JD Updated Successfully', triggerCtx)] });
+        await closeSourceCard(context);
+        try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
         break;
     }
 
@@ -206,18 +201,38 @@ async function handleCardAction(context) {
             return;
         }
 
-        let rows;
+        const loadingMsg = await context.sendActivity(MessageFactory.text('⏳ Fetching JD...'));
+
+        let fetchRes;
         try {
-            rows = await getJobMasterForIndentByFilters(roleId, departmentId);
+            fetchRes = await getJdByRoleAndDept(roleId, departmentId, userEmail);
         } catch (err) {
-            console.error('[bot] Failed to load filtered indent data:', err.message || err);
-            await context.sendActivity(
-                MessageFactory.text('Sorry, could not fetch filtered indent data.')
-            );
+            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
+            await context.sendActivity(MessageFactory.text('Sorry, could not fetch JD. Please try again.'));
             return;
         }
 
-        await context.sendActivity({ attachments: [buildIndentJobMasterCard(rows)] });
+        if (!fetchRes || fetchRes.ok !== true) {
+            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
+            await context.sendActivity(MessageFactory.text((fetchRes && fetchRes.error) ? `Failed to fetch JD: ${fetchRes.error}` : 'Sorry, could not fetch JD.'));
+            return;
+        }
+
+        const record = fetchRes.raw && fetchRes.raw.records && fetchRes.raw.records[0];
+        const fetchCtx = {
+            role: (record && record.role) || roleId,
+            department: (record && record.department) || departmentId,
+            rawOutput: record && record.output
+        };
+
+        await context.sendActivity({ attachments: [buildJdResultCard(fetchRes.output, '✅ JD Fetched Successfully', fetchCtx, { editEnabled: true, acceptEnabled: false })] });
+        await closeSourceCard(context);
+        try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
+        break;
+    }
+
+    case 'jd_accept': {
+        await context.sendActivity(MessageFactory.text('✅ JD Accepted. (Submit API coming soon.)'));
         break;
     }
 
@@ -247,7 +262,6 @@ async function handleCardAction(context) {
             roles = await getRolesByDepartment(undefined, userEmail);
             members = await getCollabMembers(userEmail);
         } catch (err) {
-            console.error('[bot] Failed to resolve JD selections:', err.message || err);
             await context.sendActivity(MessageFactory.text('Sorry, could not resolve your selections. Please try again.'));
             return;
         }
@@ -275,7 +289,6 @@ async function handleCardAction(context) {
         try {
             createRes = await createJD(jdPayload, userEmail);
         } catch (err) {
-            console.error('[bot] JD create failed:', err.message || err);
             try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
             await context.sendActivity(MessageFactory.text('Sorry, could not create JD. Please try again.'));
             return;
@@ -288,20 +301,16 @@ async function handleCardAction(context) {
         }
 
         if (createRes.output && Object.keys(createRes.output).length > 0) {
-            await context.sendActivity({ attachments: [buildJdResultCard(createRes.output)] });
+            const createCtx = {
+                role: jdPayload.role,
+                department: jdPayload.department,
+                rawOutput: createRes.raw && createRes.raw.workflow_result
+            };
+            await context.sendActivity({ attachments: [buildJdResultCard(createRes.output, '✅ JD Created Successfully', createCtx)] });
         } else {
-            await context.sendActivity({
-                attachments: [
-                    buildJdFormConfirmCard(
-                        jdPayload.department,
-                        jdPayload.role,
-                        jdPayload.originator,
-                        jdPayload.reviewer,
-                        jdPayload.approver
-                    )
-                ]
-            });
+            await context.sendActivity(MessageFactory.text('✅ JD Creation request submitted successfully.'));
         }
+        await closeSourceCard(context);
         try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
         break;
     }
@@ -350,7 +359,6 @@ class EchoBot extends ActivityHandler {
                     msAuthHeader
                 });
             } catch (err) {
-                console.error('[bot] Eligibility check failed:', err.message || err);
                 await context.sendActivity(MessageFactory.text('Sorry, could not verify eligibility. Please try again later.'));
                 await next();
                 return;
@@ -380,7 +388,6 @@ class EchoBot extends ActivityHandler {
                     roles = await getRolesByDepartment(undefined, userEmail);
                     members = await getCollabMembers(userEmail);
                 } catch (err) {
-                    console.error('[bot] Failed to load JD form dropdown data:', err.message || err);
                     await context.sendActivity(MessageFactory.text('Sorry, could not load JD form data. Please try again.'));
                     await next();
                     return;
@@ -405,7 +412,6 @@ class EchoBot extends ActivityHandler {
                     departments = await getDepartments(userEmail);
                     roles = await getRolesByDepartment(undefined, userEmail);
                 } catch (err) {
-                    console.error('[bot] Failed to load Fetch JD dropdown data:', err.message || err);
                     await context.sendActivity(MessageFactory.text('Sorry, could not load Fetch JD form data. Please try again.'));
                     await next();
                     return;

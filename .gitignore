@@ -2,6 +2,8 @@
 node_modules/
 server_validation_guide.md
 
+SampleJSON/
+
 # Environment files
 .env
 .env.*
