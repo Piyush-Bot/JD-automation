@@ -211,6 +211,20 @@ async function triggerJdWorkflow(payload, email) {
   return { ok: true, output: output || {}, raw: data };
 }
 
+async function saveGeneratedJd(payload, email) {
+  if (!DB_API) throw new Error('DB_API_BASE_URL not configured');
+  const url = `${DB_API}/save-generated-jd`;
+  const headers = await getApiHeaders(email);
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+  const resText = await res.text().catch(() => null);
+  if (!res.ok) {
+    return { ok: false, error: `API error: ${res.status}` };
+  }
+  let data = null;
+  try { data = JSON.parse(resText); } catch (_) { data = null; }
+  return { ok: true, data };
+}
+
 async function createJD(payload, email) {
   const body = { email, ...payload };
   const url = `${DB_API}/workflow-payload`;
@@ -235,5 +249,6 @@ module.exports = {
   getCollabMembers,
   getJdByRoleAndDept,
   triggerJdWorkflow,
+  saveGeneratedJd,
   createJD
 };

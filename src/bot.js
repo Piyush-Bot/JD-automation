@@ -15,6 +15,7 @@ const {
     getCollabMembers,
     getJdByRoleAndDept,
     triggerJdWorkflow,
+    saveGeneratedJd,
     createJD
 } = require('./services/apiService');
 
@@ -177,12 +178,12 @@ async function handleCardAction(context) {
         const triggerRawOutput = editRes.raw && editRes.raw.workflow_response
             ? [{ output: editRes.raw.workflow_response.output }]
             : null;
-        const triggerCtx = {
+        const triggerEditCtx = {
             role: value.role || '',
             department: value.department || '',
             rawOutput: triggerRawOutput
         };
-        await context.sendActivity({ attachments: [buildJdResultCard(editRes.output, '✅ JD Updated Successfully', triggerCtx)] });
+        await context.sendActivity({ attachments: [buildJdResultCard(editRes.output, '✅ JD Updated Successfully', triggerEditCtx, {})] });
         await closeSourceCard(context);
         try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
         break;
@@ -219,20 +220,47 @@ async function handleCardAction(context) {
         }
 
         const record = fetchRes.raw && fetchRes.raw.records && fetchRes.raw.records[0];
-        const fetchCtx = {
+        const fetchEditCtx = {
             role: (record && record.role) || roleId,
             department: (record && record.department) || departmentId,
             rawOutput: record && record.output
         };
 
-        await context.sendActivity({ attachments: [buildJdResultCard(fetchRes.output, '✅ JD Fetched Successfully', fetchCtx, { editEnabled: true, acceptEnabled: false })] });
+        await context.sendActivity({ attachments: [buildJdResultCard(fetchRes.output, '✅ JD Fetched Successfully', fetchEditCtx, {}, { editEnabled: true, acceptEnabled: false })] });
         await closeSourceCard(context);
         try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
         break;
     }
 
     case 'jd_accept': {
-        await context.sendActivity(MessageFactory.text('✅ JD Accepted. (Submit API coming soon.)'));
+        let acceptOutput = null;
+        try { acceptOutput = value.output ? JSON.parse(value.output) : null; } catch (_) {}
+        const acceptPayload = {
+            role: value.role || '',
+            department: value.department || '',
+            originator: value.originator || '',
+            reviewer: value.reviewer || '',
+            approver: value.approver || '',
+            output: acceptOutput
+        };
+        console.log('[bot] jd_accept payload', JSON.stringify(acceptPayload, null, 2));
+
+        const loadingMsg = await context.sendActivity(MessageFactory.text('⏳ Saving JD...'));
+        let saveRes;
+        try {
+            saveRes = await saveGeneratedJd(acceptPayload, userEmail);
+        } catch (err) {
+            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
+            await context.sendActivity(MessageFactory.text('Sorry, could not save JD. Please try again.'));
+            return;
+        }
+        if (!saveRes || saveRes.ok !== true) {
+            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
+            await context.sendActivity(MessageFactory.text((saveRes && saveRes.error) ? `Failed to save JD: ${saveRes.error}` : 'Sorry, could not save JD.'));
+            return;
+        }
+        await context.sendActivity(MessageFactory.text('✅ JD saved successfully.'));
+        try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
         break;
     }
 
@@ -255,6 +283,9 @@ async function handleCardAction(context) {
             return;
         }
 
+        // Respond immediately to prevent Teams 5s timeout error banner
+        const loadingMsg = await context.sendActivity(MessageFactory.text('⏳ Creating JD...'));
+
         // Resolve names from IDs first — API payload requires names
         let departments, roles, members;
         try {
@@ -262,6 +293,7 @@ async function handleCardAction(context) {
             roles = await getRolesByDepartment(undefined, userEmail);
             members = await getCollabMembers(userEmail);
         } catch (err) {
+            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
             await context.sendActivity(MessageFactory.text('Sorry, could not resolve your selections. Please try again.'));
             return;
         }
@@ -281,9 +313,6 @@ async function handleCardAction(context) {
             approver: approver ? approver.name : approverId
         };
 
-        // Show loading indicator while API processes
-        const loadingMsg = await context.sendActivity(MessageFactory.text('⏳ Creating JD...'));
-
         // Create JD via API service
         let createRes;
         try {
@@ -301,12 +330,20 @@ async function handleCardAction(context) {
         }
 
         if (createRes.output && Object.keys(createRes.output).length > 0) {
-            const createCtx = {
+            const createEditCtx = {
                 role: jdPayload.role,
                 department: jdPayload.department,
                 rawOutput: createRes.raw && createRes.raw.workflow_result
             };
-            await context.sendActivity({ attachments: [buildJdResultCard(createRes.output, '✅ JD Created Successfully', createCtx)] });
+            const createAcceptCtx = {
+                role: jdPayload.role,
+                department: jdPayload.department,
+                originator: jdPayload.originator,
+                reviewer: jdPayload.reviewer,
+                approver: jdPayload.approver,
+                output: createRes.output
+            };
+            await context.sendActivity({ attachments: [buildJdResultCard(createRes.output, '✅ JD Created Successfully', createEditCtx, createAcceptCtx)] });
         } else {
             await context.sendActivity(MessageFactory.text('✅ JD Creation request submitted successfully.'));
         }
