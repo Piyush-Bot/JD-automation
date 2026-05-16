@@ -16,6 +16,7 @@ const {
     getJdByRoleAndDept,
     triggerJdWorkflow,
     saveGeneratedJd,
+    saveUpdatedJd,
     createJD
 } = require('./services/apiService');
 
@@ -108,7 +109,8 @@ async function handleCardAction(context) {
         const ctx = {
             role: value.role || '',
             department: value.department || '',
-            rawOutput: value.rawOutput || ''
+            rawOutput: value.rawOutput || '',
+            jdId: value.jdId || ''
         };
         await context.sendActivity({ attachments: [buildEditFormCard(ctx)] });
         break;
@@ -163,6 +165,7 @@ async function handleCardAction(context) {
         let editRes;
         try {
             editRes = await triggerJdWorkflow(editPayload, userEmail);
+            console.log('[edit_form_submit] editRes:', JSON.stringify(editRes, null, 2));
         } catch (err) {
             try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
             await context.sendActivity(MessageFactory.text('Sorry, could not update JD. Please try again.'));
@@ -183,7 +186,14 @@ async function handleCardAction(context) {
             department: value.department || '',
             rawOutput: triggerRawOutput
         };
-        await context.sendActivity({ attachments: [buildJdResultCard(editRes.output, '✅ JD Updated Successfully', triggerEditCtx, {})] });
+        const updateAcceptCtx = {
+            jdId: value.jdId || '',
+            output: editRes.output
+        };
+        console.log('[edit_form_submit] output to card:', JSON.stringify(editRes.output, null, 2));
+        console.log('[edit_form_submit] editCtx to card:', JSON.stringify(triggerEditCtx, null, 2));
+        console.log('[edit_form_submit] updateAcceptCtx to card:', JSON.stringify(updateAcceptCtx, null, 2));
+        await context.sendActivity({ attachments: [buildJdResultCard(editRes.output, '✅ JD Updated Successfully', triggerEditCtx, updateAcceptCtx, { acceptAction: 'jd_update_accept' })] });
         await closeSourceCard(context);
         try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
         break;
@@ -223,7 +233,8 @@ async function handleCardAction(context) {
         const fetchEditCtx = {
             role: (record && record.role) || roleId,
             department: (record && record.department) || departmentId,
-            rawOutput: record && record.output
+            rawOutput: record && record.output,
+            jdId: (record && record.jd_id) || ''
         };
 
         await context.sendActivity({ attachments: [buildJdResultCard(fetchRes.output, '✅ JD Fetched Successfully', fetchEditCtx, {}, { editEnabled: true, acceptEnabled: false })] });
@@ -348,6 +359,33 @@ async function handleCardAction(context) {
             await context.sendActivity(MessageFactory.text('✅ JD Creation request submitted successfully.'));
         }
         await closeSourceCard(context);
+        try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
+        break;
+    }
+
+    case 'jd_update_accept': {
+        let acceptOutput = null;
+        try { acceptOutput = value.output ? JSON.parse(value.output) : null; } catch (_) {}
+        const updatePayload = {
+            jd_id: value.jdId || '',
+            output: acceptOutput
+        };
+        console.log('[bot] jd_update_accept payload:', JSON.stringify(updatePayload, null, 2));
+        const loadingMsg = await context.sendActivity(MessageFactory.text('⏳ Saving updated JD...'));
+        let saveRes;
+        try {
+            saveRes = await saveUpdatedJd(updatePayload, userEmail);
+        } catch (err) {
+            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
+            await context.sendActivity(MessageFactory.text('Sorry, could not save updated JD. Please try again.'));
+            return;
+        }
+        if (!saveRes || saveRes.ok !== true) {
+            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
+            await context.sendActivity(MessageFactory.text((saveRes && saveRes.error) ? `Failed to save updated JD: ${saveRes.error}` : 'Sorry, could not save updated JD.'));
+            return;
+        }
+        await context.sendActivity(MessageFactory.text('✅ JD updated and saved successfully.'));
         try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
         break;
     }

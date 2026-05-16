@@ -43,7 +43,8 @@ function buildEditFormCard(ctx = {}) {
             { type: 'Input.Text', id: 'description', placeholder: 'Enter description...', isMultiline: true },
             { type: 'Input.Text', id: 'role', value: ctx.role || '', isVisible: false },
             { type: 'Input.Text', id: 'department', value: ctx.department || '', isVisible: false },
-            { type: 'Input.Text', id: 'rawOutput', value: ctx.rawOutput || '', isVisible: false }
+            { type: 'Input.Text', id: 'rawOutput', value: ctx.rawOutput || '', isVisible: false },
+            { type: 'Input.Text', id: 'jdId', value: ctx.jdId || '', isVisible: false }
         ],
         actions: [
             { type: 'Action.Submit', title: '✅ Submit', data: { action: 'edit_form_submit' } }

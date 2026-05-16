@@ -76,7 +76,7 @@ function buildStringSection(title, value) {
     ];
 }
 
-function buildJdResultCard(output, title = '✅ JD Created Successfully', editCtx = {}, acceptCtx = {}, { editEnabled = true, acceptEnabled = true } = {}) {
+function buildJdResultCard(output, title = '✅ JD Created Successfully', editCtx = {}, acceptCtx = {}, { editEnabled = true, acceptEnabled = true, acceptAction = 'jd_accept' } = {}) {
     const body = [
         {
             type: 'ColumnSet',
@@ -109,8 +109,8 @@ function buildJdResultCard(output, title = '✅ JD Created Successfully', editCt
         msteams: { width: 'Full' },
         body,
         actions: [
-            { type: 'Action.Submit', title: '✏️ Edit', data: { action: 'jd_edit', role: editCtx.role || '', department: editCtx.department || '', rawOutput: editCtx.rawOutput ? JSON.stringify(editCtx.rawOutput) : '' }, style: 'positive', isEnabled: editEnabled },
-            { type: 'Action.Submit', title: '✅ Accept', data: { action: 'jd_accept', role: acceptCtx.role || '', department: acceptCtx.department || '', originator: acceptCtx.originator || '', reviewer: acceptCtx.reviewer || '', approver: acceptCtx.approver || '', output: acceptCtx.output ? JSON.stringify(acceptCtx.output) : '' }, style: 'positive', isEnabled: acceptEnabled }
+            { type: 'Action.Submit', title: '✏️ Edit', data: { action: 'jd_edit', role: editCtx.role || '', department: editCtx.department || '', rawOutput: editCtx.rawOutput ? JSON.stringify(editCtx.rawOutput) : '', jdId: editCtx.jdId || '' }, style: 'positive', isEnabled: editEnabled },
+            { type: 'Action.Submit', title: '✅ Accept', data: { action: acceptAction, role: acceptCtx.role || '', department: acceptCtx.department || '', originator: acceptCtx.originator || '', reviewer: acceptCtx.reviewer || '', approver: acceptCtx.approver || '', output: acceptCtx.output ? JSON.stringify(acceptCtx.output) : '', jdId: acceptCtx.jdId || '' }, style: 'positive', isEnabled: acceptEnabled }
         ]
     };
 

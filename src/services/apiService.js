@@ -41,6 +41,7 @@ async function loginAndGetToken(email) {
     });
 
     if (!res.ok) {
+      console.error('[API FAIL] Login (form-encoded):', { url, payload: { user_email: email }, status: res.status });
       throw new Error(`login failed: ${res.status}`);
     }
   }
@@ -80,6 +81,7 @@ async function apiGet(path, email) {
   const headers = await getApiHeaders(email);
   const res = await fetch(`${DB_API}${path}`, { method: 'GET', headers });
   if (!res.ok) {
+    console.error('[API FAIL] GET:', { url: `${DB_API}${path}`, status: res.status });
     throw new Error(`GET ${path} failed: ${res.status}`);
   }
   return res.json();
@@ -188,6 +190,7 @@ async function getJdByRoleAndDept(roleId, departmentId, email) {
   const res = await fetch(url, { method: 'GET', headers });
   const resText = await res.text().catch(() => null);
   if (!res.ok) {
+    console.error('[API FAIL] getJdByRoleAndDept:', { url, status: res.status, body: resText });
     return { ok: false, error: `API error: ${res.status}` };
   }
   let data = null;
@@ -203,6 +206,7 @@ async function triggerJdWorkflow(payload, email) {
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
   const resText = await res.text().catch(() => null);
   if (!res.ok) {
+    console.error('[API FAIL] triggerJdWorkflow:', { url, payload, status: res.status, body: resText });
     return { ok: false, error: `API error: ${res.status}` };
   }
   let data = null;
@@ -215,9 +219,29 @@ async function saveGeneratedJd(payload, email) {
   if (!DB_API) throw new Error('DB_API_BASE_URL not configured');
   const url = `${DB_API}/save-generated-jd`;
   const headers = await getApiHeaders(email);
+  console.log('[saveGeneratedJd] url:', url);
+  console.log('[saveGeneratedJd] payload:', JSON.stringify(payload, null, 2));
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
   const resText = await res.text().catch(() => null);
   if (!res.ok) {
+    console.error('[API FAIL] saveGeneratedJd:', { url, payload, status: res.status, body: resText });
+    return { ok: false, error: `API error: ${res.status}` };
+  }
+  let data = null;
+  try { data = JSON.parse(resText); } catch (_) { data = null; }
+  return { ok: true, data };
+}
+
+async function saveUpdatedJd(payload, email) {
+  if (!DB_API) throw new Error('DB_API_BASE_URL not configured');
+  const url = `${DB_API}/Update-generated-jd`;
+  const headers = await getApiHeaders(email);
+  console.log('[saveUpdatedJd] url:', url);
+  console.log('[saveUpdatedJd] payload:', JSON.stringify(payload, null, 2));
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+  const resText = await res.text().catch(() => null);
+  if (!res.ok) {
+    console.error('[API FAIL] saveUpdatedJd:', { url, payload, status: res.status, body: resText });
     return { ok: false, error: `API error: ${res.status}` };
   }
   let data = null;
@@ -232,6 +256,7 @@ async function createJD(payload, email) {
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   const resText = await res.text().catch(() => null);
   if (!res.ok) {
+    console.error('[API FAIL] createJD:', { url, payload: body, status: res.status, body: resText });
     return { ok: false, error: `API error: ${res.status}` };
   }
   let data = null;
@@ -250,5 +275,6 @@ module.exports = {
   getJdByRoleAndDept,
   triggerJdWorkflow,
   saveGeneratedJd,
+  saveUpdatedJd,
   createJD
 };
