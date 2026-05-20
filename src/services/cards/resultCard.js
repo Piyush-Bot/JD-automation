@@ -109,8 +109,8 @@ function buildJdResultCard(output, title = '✅ JD Created Successfully', editCt
         msteams: { width: 'Full' },
         body,
         actions: [
-            { type: 'Action.Submit', title: '✏️ Edit', data: { action: 'jd_edit', role: editCtx.role || '', department: editCtx.department || '', rawOutput: editCtx.rawOutput ? JSON.stringify(editCtx.rawOutput) : '', jdId: editCtx.jdId || '' }, style: 'positive', isEnabled: editEnabled },
-            { type: 'Action.Submit', title: '✅ Accept', data: { action: acceptAction, role: acceptCtx.role || '', department: acceptCtx.department || '', originator: acceptCtx.originator || '', reviewer: acceptCtx.reviewer || '', approver: acceptCtx.approver || '', output: acceptCtx.output ? JSON.stringify(acceptCtx.output) : '', jdId: acceptCtx.jdId || '' }, style: 'positive', isEnabled: acceptEnabled }
+            { type: 'Action.Submit', title: '✏️ Edit', data: { action: 'jd_edit', role: editCtx.role || '', department: editCtx.department || '', originator: editCtx.originator || '', reviewer: editCtx.reviewer || '', approver: editCtx.approver || '', rawOutput: editCtx.rawOutput ? JSON.stringify(editCtx.rawOutput) : '', jdId: editCtx.jdId || '', flowSource: editCtx.flowSource || '' }, style: 'positive', isEnabled: editEnabled },
+            { type: 'Action.Submit', title: '✅ Accept', data: { action: acceptAction, role: acceptCtx.role || '', department: acceptCtx.department || '', originator: acceptCtx.originator || '', reviewer: acceptCtx.reviewer || '', approver: acceptCtx.approver || '', output: acceptCtx.output ? JSON.stringify(acceptCtx.output) : '', jdId: acceptCtx.jdId || '', flowSource: acceptCtx.flowSource || '' }, style: 'positive', isEnabled: acceptEnabled }
         ]
     };
 

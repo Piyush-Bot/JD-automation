@@ -10,8 +10,8 @@ function buildMenuCard() {
             { type: 'TextBlock', text: 'Please select an option to proceed:', wrap: true, size: 'Small', spacing: 'Small' }
         ],
         actions: [
-            { type: 'Action.Submit', title: '📄 JD Creation', data: { action: 'jd_start' } },
-            { type: 'Action.Submit', title: '📋 JD Edit', data: { action: 'fetch_indent' } }
+            { type: 'Action.Submit', title: '📄 JD Creation', data: { action: 'jd_start', flowSource: 'creation' } },
+            { type: 'Action.Submit', title: '📋 JD Edit', data: { action: 'fetch_indent', flowSource: 'fetch' } }
         ]
     };
     return CardFactory.adaptiveCard(card);

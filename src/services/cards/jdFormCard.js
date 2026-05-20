@@ -16,6 +16,7 @@ function buildJdCreatFormCard(departments, roles, members) {
                 ]
             },
             { type: 'TextBlock', text: 'Select Department, Role and the workflow participants, then submit.', wrap: true, size: 'Small', spacing: 'Small' },
+            { type: 'Input.Text', id: 'flowSource', value: 'creation', isVisible: false },
             {
                 type: 'ColumnSet', spacing: 'Medium',
                 columns: [

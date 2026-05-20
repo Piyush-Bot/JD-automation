@@ -53,15 +53,16 @@ async function handleCardAction(context) {
 
     switch (action) {
     case 'jd_start': {
+        const startFlowSource = (value && value.flowSource) || 'creation';
         let departments;
         let roles;
         let members;
         try {
             // Ensure login first so downstream calls reuse the token
-            await loginForDataApi(userEmail);
-            departments = await getDepartments(userEmail);
-            roles = await getRolesByDepartment(undefined, userEmail);
-            members = await getCollabMembers(userEmail);
+            await loginForDataApi(userEmail, startFlowSource);
+            departments = await getDepartments(userEmail, startFlowSource);
+            roles = await getRolesByDepartment(undefined, userEmail, startFlowSource);
+            members = await getCollabMembers(userEmail, startFlowSource);
         } catch (err) {
             await context.sendActivity(
                 MessageFactory.text('Sorry, could not load JD form data. Please check the database connection and tables.')
@@ -81,12 +82,13 @@ async function handleCardAction(context) {
     }
 
     case 'fetch_indent': {
+        const fetchFlowSource = (value && value.flowSource) || 'fetch';
         let departments;
         let roles;
         try {
-            await loginForDataApi(userEmail);
-            departments = await getDepartments(userEmail);
-            roles = await getRolesByDepartment(undefined, userEmail);
+            await loginForDataApi(userEmail, fetchFlowSource);
+            departments = await getDepartments(userEmail, fetchFlowSource);
+            roles = await getRolesByDepartment(undefined, userEmail, fetchFlowSource);
         } catch (err) {
             await context.sendActivity(
                 MessageFactory.text('Sorry, could not load department/role data for fetch-jd. Please check the database connection and tables.')
@@ -109,8 +111,12 @@ async function handleCardAction(context) {
         const ctx = {
             role: value.role || '',
             department: value.department || '',
+            originator: value.originator || '',
+            reviewer: value.reviewer || '',
+            approver: value.approver || '',
             rawOutput: value.rawOutput || '',
-            jdId: value.jdId || ''
+            jdId: value.jdId || '',
+            flowSource: value.flowSource || ''
         };
         await context.sendActivity({ attachments: [buildEditFormCard(ctx)] });
         break;
@@ -153,18 +159,39 @@ async function handleCardAction(context) {
 
         let rawOutput = null;
         try { rawOutput = value.rawOutput ? JSON.parse(value.rawOutput) : null; } catch (_) { rawOutput = null; }
+        let outputList;
+        if (rawOutput && Array.isArray(rawOutput.response)) {
+            outputList = rawOutput.response;
+        } else if (Array.isArray(rawOutput)) {
+            outputList = rawOutput.map((x) => (x && x.output !== undefined ? x.output : x));
+        } else if (rawOutput && rawOutput.output !== undefined) {
+            outputList = Array.isArray(rawOutput.output) ? rawOutput.output : [rawOutput.output];
+        } else if (rawOutput != null) {
+            outputList = [rawOutput];
+        } else {
+            outputList = [];
+        }
+        console.log('[edit_form_submit] normalized output isArray:', Array.isArray(outputList), 'length:', Array.isArray(outputList) ? outputList.length : 0);
+
+        const normalizedForApi = outputList.map((item) => (
+            item && typeof item === 'object' && Object.prototype.hasOwnProperty.call(item, 'output')
+                ? item
+                : { output: item }
+        ));
+        console.log('[edit_form_submit] normalizedForApi first item has output:', !!(normalizedForApi[0] && normalizedForApi[0].output));
 
         const editPayload = {
             role: value.role || '',
             department: value.department || '',
             location: process.env.DEFAULT_LOCATION || 'Bangalore',
             prompt,
-            output: rawOutput
+            output: normalizedForApi
         };
         const loadingMsg = await context.sendActivity(MessageFactory.text('⏳ Updating JD...'));
         let editRes;
         try {
-            editRes = await triggerJdWorkflow(editPayload, userEmail);
+            const flowSource = value.flowSource || (value.jdId ? 'fetch' : 'creation');
+            editRes = await triggerJdWorkflow(editPayload, userEmail, flowSource);
             console.log('[edit_form_submit] editRes:', JSON.stringify(editRes, null, 2));
         } catch (err) {
             try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
@@ -181,20 +208,37 @@ async function handleCardAction(context) {
         const triggerRawOutput = editRes.raw && editRes.raw.workflow_response
             ? [{ output: editRes.raw.workflow_response.output }]
             : null;
+        const flowSource = value.flowSource || (value.jdId ? 'fetch' : 'creation');
         const triggerEditCtx = {
             role: value.role || '',
             department: value.department || '',
-            rawOutput: triggerRawOutput
-        };
-        const updateAcceptCtx = {
+            originator: value.originator || '',
+            reviewer: value.reviewer || '',
+            approver: value.approver || '',
+            rawOutput: triggerRawOutput,
             jdId: value.jdId || '',
-            output: editRes.output
+            flowSource
         };
-        console.log('[edit_form_submit] output to card:', JSON.stringify(editRes.output, null, 2));
-        console.log('[edit_form_submit] editCtx to card:', JSON.stringify(triggerEditCtx, null, 2));
-        console.log('[edit_form_submit] updateAcceptCtx to card:', JSON.stringify(updateAcceptCtx, null, 2));
-        await context.sendActivity({ attachments: [buildJdResultCard(editRes.output, '✅ JD Updated Successfully', triggerEditCtx, updateAcceptCtx, { acceptAction: 'jd_update_accept' })] });
-        await closeSourceCard(context);
+
+        if (flowSource === 'fetch') {
+            const updateAcceptCtx = {
+                jdId: value.jdId || '',
+                output: editRes.output,
+                flowSource
+            };
+            await context.sendActivity({ attachments: [buildJdResultCard(editRes.output, '✅ JD Updated Successfully', triggerEditCtx, updateAcceptCtx, { acceptAction: 'jd_update_accept' })] });
+        } else {
+            const createAcceptCtx = {
+                role: value.role || '',
+                department: value.department || '',
+                originator: value.originator || '',
+                reviewer: value.reviewer || '',
+                approver: value.approver || '',
+                output: editRes.output,
+                flowSource
+            };
+            await context.sendActivity({ attachments: [buildJdResultCard(editRes.output, '✅ JD Updated Successfully', triggerEditCtx, createAcceptCtx)] });
+        }
         try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
         break;
     }
@@ -202,6 +246,7 @@ async function handleCardAction(context) {
     case 'fetch_indent_submit': {
         const departmentId = value.departmentId;
         const roleId = value.roleId;
+        const flowSource = value.flowSource || 'fetch';
 
         const missing = [
             !departmentId && 'Department',
@@ -216,16 +261,43 @@ async function handleCardAction(context) {
 
         let fetchRes;
         try {
-            fetchRes = await getJdByRoleAndDept(roleId, departmentId, userEmail);
+            fetchRes = await getJdByRoleAndDept(roleId, departmentId, userEmail, flowSource);
         } catch (err) {
-            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
-            await context.sendActivity(MessageFactory.text('Sorry, could not fetch JD. Please try again.'));
+            await context.updateActivity({
+                id: loadingMsg.id,
+                type: 'message',
+                conversation: context.activity.conversation,
+                attachments: [],
+                text: 'Sorry, could not fetch JD. Please try again.'
+            });
             return;
         }
 
         if (!fetchRes || fetchRes.ok !== true) {
-            try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
-            await context.sendActivity(MessageFactory.text((fetchRes && fetchRes.error) ? `Failed to fetch JD: ${fetchRes.error}` : 'Sorry, could not fetch JD.'));
+            const errText = (fetchRes && fetchRes.error) ? `Failed to fetch JD: ${fetchRes.error}` : 'Sorry, could not fetch JD.';
+            await context.updateActivity({
+                id: loadingMsg.id,
+                type: 'message',
+                conversation: context.activity.conversation,
+                attachments: [],
+                text: errText
+            });
+            return;
+        }
+
+        const data = fetchRes && fetchRes.raw;
+        const noRecords = !data || data.found === false || !Array.isArray(data.records) || data.records.length === 0;
+        if (noRecords) {
+            const notFoundText = (data && data.message)
+                ? data.message
+                : `No JD found for role_id=${roleId}, department_id=${departmentId}`;
+            await context.updateActivity({
+                id: loadingMsg.id,
+                type: 'message',
+                conversation: context.activity.conversation,
+                attachments: [],
+                text: notFoundText
+            });
             return;
         }
 
@@ -234,11 +306,11 @@ async function handleCardAction(context) {
             role: (record && record.role) || roleId,
             department: (record && record.department) || departmentId,
             rawOutput: record && record.output,
-            jdId: (record && record.jd_id) || ''
+            jdId: (record && record.jd_id) || '',
+            flowSource: 'fetch'
         };
 
         await context.sendActivity({ attachments: [buildJdResultCard(fetchRes.output, '✅ JD Fetched Successfully', fetchEditCtx, {}, { editEnabled: true, acceptEnabled: false })] });
-        await closeSourceCard(context);
         try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
         break;
     }
@@ -254,12 +326,13 @@ async function handleCardAction(context) {
             approver: value.approver || '',
             output: acceptOutput
         };
-        console.log('[bot] jd_accept payload', JSON.stringify(acceptPayload, null, 2));
+        const flowSourceAccept = value.flowSource || 'creation';
+        console.log('[bot] jd_accept payload', { flowSource: flowSourceAccept, payload: acceptPayload });
 
         const loadingMsg = await context.sendActivity(MessageFactory.text('⏳ Saving JD...'));
         let saveRes;
         try {
-            saveRes = await saveGeneratedJd(acceptPayload, userEmail);
+            saveRes = await saveGeneratedJd(acceptPayload, userEmail, flowSourceAccept);
         } catch (err) {
             try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
             await context.sendActivity(MessageFactory.text('Sorry, could not save JD. Please try again.'));
@@ -281,6 +354,7 @@ async function handleCardAction(context) {
         const originatorId = value.originatorId;
         const reviewerId = value.reviewerId;
         const approverId = value.approverId;
+        const creationFlow = value.flowSource || 'creation';
 
         const missing = [
             !deptId && 'Department',
@@ -300,9 +374,9 @@ async function handleCardAction(context) {
         // Resolve names from IDs first — API payload requires names
         let departments, roles, members;
         try {
-            departments = await getDepartments(userEmail);
-            roles = await getRolesByDepartment(undefined, userEmail);
-            members = await getCollabMembers(userEmail);
+            departments = await getDepartments(userEmail, creationFlow);
+            roles = await getRolesByDepartment(undefined, userEmail, creationFlow);
+            members = await getCollabMembers(userEmail, creationFlow);
         } catch (err) {
             try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
             await context.sendActivity(MessageFactory.text('Sorry, could not resolve your selections. Please try again.'));
@@ -327,7 +401,7 @@ async function handleCardAction(context) {
         // Create JD via API service
         let createRes;
         try {
-            createRes = await createJD(jdPayload, userEmail);
+            createRes = await createJD(jdPayload, userEmail, creationFlow);
         } catch (err) {
             try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
             await context.sendActivity(MessageFactory.text('Sorry, could not create JD. Please try again.'));
@@ -344,7 +418,11 @@ async function handleCardAction(context) {
             const createEditCtx = {
                 role: jdPayload.role,
                 department: jdPayload.department,
-                rawOutput: createRes.raw && createRes.raw.workflow_result
+                originator: jdPayload.originator,
+                reviewer: jdPayload.reviewer,
+                approver: jdPayload.approver,
+                rawOutput: createRes.raw && createRes.raw.workflow_result,
+                flowSource: 'creation'
             };
             const createAcceptCtx = {
                 role: jdPayload.role,
@@ -352,13 +430,13 @@ async function handleCardAction(context) {
                 originator: jdPayload.originator,
                 reviewer: jdPayload.reviewer,
                 approver: jdPayload.approver,
-                output: createRes.output
+                output: createRes.output,
+                flowSource: 'creation'
             };
             await context.sendActivity({ attachments: [buildJdResultCard(createRes.output, '✅ JD Created Successfully', createEditCtx, createAcceptCtx)] });
         } else {
             await context.sendActivity(MessageFactory.text('✅ JD Creation request submitted successfully.'));
         }
-        await closeSourceCard(context);
         try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
         break;
     }
@@ -370,11 +448,12 @@ async function handleCardAction(context) {
             jd_id: value.jdId || '',
             output: acceptOutput
         };
-        console.log('[bot] jd_update_accept payload:', JSON.stringify(updatePayload, null, 2));
+        const flowSourceUpdate = value.flowSource || 'fetch';
+        console.log('[bot] jd_update_accept payload:', { flowSource: flowSourceUpdate, payload: updatePayload });
         const loadingMsg = await context.sendActivity(MessageFactory.text('⏳ Saving updated JD...'));
         let saveRes;
         try {
-            saveRes = await saveUpdatedJd(updatePayload, userEmail);
+            saveRes = await saveUpdatedJd(updatePayload, userEmail, flowSourceUpdate);
         } catch (err) {
             try { await context.deleteActivity(loadingMsg.id); } catch (_) {}
             await context.sendActivity(MessageFactory.text('Sorry, could not save updated JD. Please try again.'));
@@ -402,7 +481,11 @@ class EchoBot extends ActivityHandler {
         this.onMessage(async (context, next) => {
             // Adaptive Card Action.Submit
             if (context.activity.value) {
-                await handleCardAction(context);
+                try {
+                    await handleCardAction(context);
+                } catch (err) {
+                    console.error('[onMessage] handleCardAction error:', err);
+                }
                 await next();
                 return;
             }
@@ -456,12 +539,13 @@ class EchoBot extends ActivityHandler {
 
             // JD_CREATE: skip menu — login then open JD Creation form directly
             if (intent === 'JD_CREATE') {
+                const flowFromIntent = 'creation';
                 let departments, roles, members;
                 try {
-                    await loginForDataApi(userEmail);
-                    departments = await getDepartments(userEmail);
-                    roles = await getRolesByDepartment(undefined, userEmail);
-                    members = await getCollabMembers(userEmail);
+                    await loginForDataApi(userEmail, flowFromIntent);
+                    departments = await getDepartments(userEmail, flowFromIntent);
+                    roles = await getRolesByDepartment(undefined, userEmail, flowFromIntent);
+                    members = await getCollabMembers(userEmail, flowFromIntent);
                 } catch (err) {
                     await context.sendActivity(MessageFactory.text('Sorry, could not load JD form data. Please try again.'));
                     await next();
@@ -481,11 +565,12 @@ class EchoBot extends ActivityHandler {
 
             // JD_FETCH: skip menu — login then open Fetch JD filter form directly
             if (intent === 'JD_FETCH') {
+                const flowFromIntent = 'fetch';
                 let departments, roles;
                 try {
-                    await loginForDataApi(userEmail);
-                    departments = await getDepartments(userEmail);
-                    roles = await getRolesByDepartment(undefined, userEmail);
+                    await loginForDataApi(userEmail, flowFromIntent);
+                    departments = await getDepartments(userEmail, flowFromIntent);
+                    roles = await getRolesByDepartment(undefined, userEmail, flowFromIntent);
                 } catch (err) {
                     await context.sendActivity(MessageFactory.text('Sorry, could not load Fetch JD form data. Please try again.'));
                     await next();
@@ -518,6 +603,11 @@ class EchoBot extends ActivityHandler {
             }
             await next();
         });
+
+    }
+
+    async onInvokeActivity(context) {
+        return { status: 200, body: { statusCode: 200 } };
     }
 }
 

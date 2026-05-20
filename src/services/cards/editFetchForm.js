@@ -15,6 +15,7 @@ function buildJdEditCard(departments, roles) {
                 ]
             },
             { type: 'TextBlock', text: 'Choose Department and Role, then submit to fetch filtered JD records.', wrap: true, size: 'Small', spacing: 'Small' },
+            { type: 'Input.Text', id: 'flowSource', value: 'fetch', isVisible: false },
             {
                 type: 'ColumnSet', spacing: 'Medium',
                 columns: [

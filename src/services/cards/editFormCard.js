@@ -35,7 +35,6 @@ function buildEditFormCard(ctx = {}) {
                     { title: 'Skills', value: 'skills' },
                     { title: 'Experience', value: 'experience' },
                     { title: 'Education', value: 'education' },
-                    { title: 'Comp Range', value: 'comp_range' },
                     { title: 'Role & Responsibility', value: 'roles_and_respo' }
                 ]
             },
@@ -43,6 +42,10 @@ function buildEditFormCard(ctx = {}) {
             { type: 'Input.Text', id: 'description', placeholder: 'Enter description...', isMultiline: true },
             { type: 'Input.Text', id: 'role', value: ctx.role || '', isVisible: false },
             { type: 'Input.Text', id: 'department', value: ctx.department || '', isVisible: false },
+            { type: 'Input.Text', id: 'originator', value: ctx.originator || '', isVisible: false },
+            { type: 'Input.Text', id: 'reviewer', value: ctx.reviewer || '', isVisible: false },
+            { type: 'Input.Text', id: 'approver', value: ctx.approver || '', isVisible: false },
+            { type: 'Input.Text', id: 'flowSource', value: ctx.flowSource || '', isVisible: false },
             { type: 'Input.Text', id: 'rawOutput', value: ctx.rawOutput || '', isVisible: false },
             { type: 'Input.Text', id: 'jdId', value: ctx.jdId || '', isVisible: false }
         ],
