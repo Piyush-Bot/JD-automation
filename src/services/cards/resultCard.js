@@ -76,6 +76,64 @@ function buildStringSection(title, value) {
     ];
 }
 
+function splitNumberedPoints(value) {
+    const text = String(value || '').replace(/\r\n/g, '\n').trim();
+    const re = /(?:^|\n)\s*(?:\d+[\.\)]|[-•·])\s+/g;
+    const matches = [...text.matchAll(re)];
+    if (matches.length === 0) return { intro: text, points: [] };
+ 
+    const intro = text.slice(0, matches[0].index).trim();
+    const points = matches.map((m, i) => {
+        const start = m.index + m[0].length;
+        const end = matches[i + 1] ? matches[i + 1].index : text.length;
+        const raw = text.slice(start, end).trim();
+        return raw.replace(/^(?:\d+[\.\)]|[-•·])\s+/, '').trim();
+    }).filter(Boolean);
+ 
+    return { intro, points };
+}
+
+function buildPointSection(title, value) {
+    const { intro, points } = splitNumberedPoints(value);
+    if (points.length === 0) return buildStringSection(title, value);
+
+    return [
+        {
+            type: 'TextBlock',
+            text: title,
+            weight: 'Bolder',
+            size: 'Medium',
+            spacing: 'Medium',
+            separator: true,
+            wrap: true
+        },
+        {
+            type: 'Container',
+            style: 'emphasis',
+            spacing: 'Small',
+            items: [
+                ...(intro ? [{ type: 'TextBlock', text: intro, wrap: true, size: 'Small' }] : []),
+                ...points.map((point) => ({
+                    type: 'ColumnSet',
+                    spacing: 'Small',
+                    columns: [
+                        {
+                            type: 'Column',
+                            width: 'auto',
+                            items: [{ type: 'TextBlock', text: '•', wrap: false, size: 'Small' }]
+                        },
+                        {
+                            type: 'Column',
+                            width: 'stretch',
+                            items: [{ type: 'TextBlock', text: point, wrap: true, size: 'Small' }]
+                        }
+                    ]
+                }))
+            ]
+        }
+    ];
+}
+
 function buildJdResultCard(output, title = '✅ JD Created Successfully', editCtx = {}, acceptCtx = {}, { editEnabled = true, acceptEnabled = true, acceptAction = 'jd_accept' } = {}) {
     const body = [
         {
@@ -97,6 +155,8 @@ function buildJdResultCard(output, title = '✅ JD Created Successfully', editCt
         const title = formatSectionTitle(key);
         if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
             body.push(...buildTableSection(title, value));
+        } else if (key.toLowerCase() === 'responsibility' && typeof value === 'string' && value) {
+            body.push(...buildPointSection(title, value));
         } else if (typeof value === 'string' && value) {
             body.push(...buildStringSection(title, value));
         }

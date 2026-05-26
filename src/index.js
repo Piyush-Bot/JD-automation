@@ -17,9 +17,7 @@ const server = restify.createServer();
 server.use(restify.plugins.bodyParser());
 
 const port = process.env.port || process.env.PORT || 3978;
-server.listen(port, () => {
-    console.log(`[jd-bot-service] listening on http://localhost:${port}`);
-});
+server.listen(port, () => {});
 
 // Bot Framework credentials
 const botFrameworkAuthConfig = {
@@ -34,7 +32,6 @@ const adapter = new CloudAdapter(botFrameworkAuthentication);
 
 // Catch-all for errors.
 const onTurnErrorHandler = async (context, error) => {
-    console.error(`[onTurnError] unhandled error: ${error}`);
     await context.sendActivity('The bot encountered an error or bug.');
 };
 adapter.onTurnError = onTurnErrorHandler;

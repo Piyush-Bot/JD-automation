@@ -1,9 +1,11 @@
 const { CardFactory } = require('botbuilder');
 
-function buildJdCreatFormCard(departments, roles, members) {
+function buildJdCreatFormCard(departments, roles, members, defaults) {
     const deptChoices = (departments || []).map((d) => ({ title: d.name, value: String(d.id) }));
     const roleChoices = (roles || []).map((r) => ({ title: r.name, value: String(r.id) }));
     const memberChoices = (members || []).map((m) => ({ title: m.name, value: String(m.id) }));
+    const defaultDeptId = defaults && defaults.deptId ? String(defaults.deptId) : undefined;
+    const defaultRoleId = defaults && defaults.roleId ? String(defaults.roleId) : undefined;
 
     const card = {
         type: 'AdaptiveCard', $schema: 'http://adaptivecards.io/schemas/adaptive-card.json', version: '1.4', msteams: { width: 'Full' },
@@ -22,11 +24,11 @@ function buildJdCreatFormCard(departments, roles, members) {
                 columns: [
                     { type: 'Column', width: 'stretch', items: [
                         { type: 'TextBlock', text: 'Department:', wrap: true, size: 'Small', weight: 'Bolder' },
-                        { type: 'Input.ChoiceSet', id: 'deptId', style: 'compact', placeholder: '-- Choose Department --', choices: deptChoices }
+                        { type: 'Input.ChoiceSet', id: 'deptId', style: 'compact', placeholder: '-- Choose Department --', choices: deptChoices, ...(defaultDeptId ? { value: defaultDeptId } : {}) }
                     ]},
                     { type: 'Column', width: 'stretch', items: [
                         { type: 'TextBlock', text: 'Role:', wrap: true, size: 'Small', weight: 'Bolder' },
-                        { type: 'Input.ChoiceSet', id: 'roleId', style: 'compact', placeholder: '-- Choose Role --', choices: roleChoices }
+                        { type: 'Input.ChoiceSet', id: 'roleId', style: 'compact', placeholder: '-- Choose Role --', choices: roleChoices, ...(defaultRoleId ? { value: defaultRoleId } : {}) }
                     ]}
                 ]
             },
