@@ -171,14 +171,22 @@ async function handleCardAction(context) {
         } else {
             outputList = [];
         }
+<<<<<<< Updated upstream
         console.log('[edit_form_submit] normalized output isArray:', Array.isArray(outputList), 'length:', Array.isArray(outputList) ? outputList.length : 0);
+=======
+        // console.log('[edit_form_submit] normalized output isArray:', Array.isArray(outputList), 'length:', Array.isArray(outputList) ? outputList.length : 0);
+>>>>>>> Stashed changes
 
         const normalizedForApi = outputList.map((item) => (
             item && typeof item === 'object' && Object.prototype.hasOwnProperty.call(item, 'output')
                 ? item
                 : { output: item }
         ));
+<<<<<<< Updated upstream
         console.log('[edit_form_submit] normalizedForApi first item has output:', !!(normalizedForApi[0] && normalizedForApi[0].output));
+=======
+        // console.log('[edit_form_submit] normalizedForApi first item has output:', !!(normalizedForApi[0] && normalizedForApi[0].output));
+>>>>>>> Stashed changes
 
         const editPayload = {
             role: value.role || '',
@@ -188,6 +196,7 @@ async function handleCardAction(context) {
             output: normalizedForApi
         };
         const loadingMsg = await context.sendActivity(MessageFactory.text('⏳ Updating JD...'));
+<<<<<<< Updated upstream
         let editRes;
         try {
             const flowSource = value.flowSource || (value.jdId ? 'fetch' : 'creation');
@@ -218,6 +227,59 @@ async function handleCardAction(context) {
             rawOutput: triggerRawOutput,
             jdId: value.jdId || '',
             flowSource
+=======
+        const reference = TurnContext.getConversationReference(context.activity);
+        const adapter = context.adapter;
+        const appId = process.env.MicrosoftAppId || null;
+        const captured = { value: { ...value }, userEmail, editPayload, loadingId: loadingMsg.id };
+        const runProactive = async (proactiveContext) => {
+            try {
+                const flowSource = captured.value.flowSource || (captured.value.jdId ? 'fetch' : 'creation');
+                const editRes = await triggerJdWorkflow(captured.editPayload, captured.userEmail, flowSource);
+                // console.log('[edit_form_submit] editRes:', JSON.stringify(editRes, null, 2));
+                if (!editRes || editRes.ok !== true) {
+                    try { await proactiveContext.deleteActivity(captured.loadingId); } catch (_) {}
+                    await proactiveContext.sendActivity(MessageFactory.text((editRes && editRes.error) ? `Failed to update JD: ${editRes.error}` : 'Sorry, could not update JD.'));
+                    return;
+                }
+                const triggerRawOutput = editRes.raw && editRes.raw.workflow_response ? [{ output: editRes.raw.workflow_response.output }] : null;
+                const triggerEditCtx = {
+                    role: captured.value.role || '',
+                    department: captured.value.department || '',
+                    originator: captured.value.originator || '',
+                    reviewer: captured.value.reviewer || '',
+                    approver: captured.value.approver || '',
+                    rawOutput: triggerRawOutput,
+                    jdId: captured.value.jdId || '',
+                    flowSource
+                };
+                if (flowSource === 'fetch') {
+                    const updateAcceptCtx = {
+                        jdId: captured.value.jdId || '',
+                        output: editRes.output,
+                        flowSource
+                    };
+                    await proactiveContext.sendActivity({ attachments: [buildJdResultCard(editRes.output, '✅ JD Updated Successfully', triggerEditCtx, updateAcceptCtx, { acceptAction: 'jd_update_accept' })] });
+                } else {
+                    const createAcceptCtx = {
+                        role: captured.value.role || '',
+                        department: captured.value.department || '',
+                        originator: captured.value.originator || '',
+                        reviewer: captured.value.reviewer || '',
+                        approver: captured.value.approver || '',
+                        output: editRes.output,
+                        flowSource
+                    };
+                    await proactiveContext.sendActivity({ attachments: [buildJdResultCard(editRes.output, '✅ JD Updated Successfully', triggerEditCtx, createAcceptCtx)] });
+                }
+            } catch (err) {
+                try { await proactiveContext.deleteActivity(captured.loadingId); } catch (_) {}
+                await proactiveContext.sendActivity(MessageFactory.text('Sorry, could not update JD. Please try again.'));
+                return;
+            } finally {
+                try { await proactiveContext.deleteActivity(captured.loadingId); } catch (_) {}
+            }
+>>>>>>> Stashed changes
         };
 
         if (flowSource === 'fetch') {

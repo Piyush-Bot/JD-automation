@@ -75,6 +75,12 @@ async function getApiHeaders(email) {
     'Connection': 'keep-alive',
     Authorization: formatAuthHeader(token)
   };
+<<<<<<< Updated upstream
+=======
+  // console.log('[getApiHeaders] token:', token);
+  // console.log('[getApiHeaders] headers:', JSON.stringify(headers));
+  return headers;
+>>>>>>> Stashed changes
 }
 
 async function apiGet(path, email) {
@@ -118,7 +124,10 @@ async function checkMenuEligibility(ctx) {
     try {
       const aadToken = await getGatewayAccessToken().catch(() => null);
       const url = `${Agent_API}/bot/jd/eligibility`;
+<<<<<<< Updated upstream
       console.log('[checkMenuEligibility] POST', url);
+=======
+>>>>>>> Stashed changes
       console.log('[checkMenuEligibility] hasMsAuthHeader:', !!(ctx && ctx.msAuthHeader), 'hasAadToken:', !!aadToken);
       const headers = {
         'Content-Type': 'application/json',
@@ -126,6 +135,8 @@ async function checkMenuEligibility(ctx) {
         'X-Microsoft-AppId': process.env.MicrosoftAppId || '',
         ...(aadToken ? { Authorization: `Bearer ${aadToken}` } : {})
       };
+    //    console.log('[checkMenuEligibility] X-Forwarded-Authorization:', ctx && ctx.msAuthHeader ? String(ctx.msAuthHeader) : null);
+    //  console.log('[checkMenuEligibility] Authorization:', aadToken ? `Bearer ${String(aadToken)}` : null);
       const body = {
         userId: ctx && ctx.userId,
         aadObjectId: ctx && ctx.aadObjectId,
@@ -143,7 +154,10 @@ async function checkMenuEligibility(ctx) {
         headers,
         body: JSON.stringify(body)
       });
+<<<<<<< Updated upstream
       console.log('[checkMenuEligibility] status:', res.status);
+=======
+>>>>>>> Stashed changes
       if (!res.ok) {
         console.error('[API FAIL] checkMenuEligibility:', { url, status: res.status });
       }
@@ -154,7 +168,25 @@ async function checkMenuEligibility(ctx) {
         data = null;
       }
       console.log('[checkMenuEligibility] response JSON:', data);
+<<<<<<< Updated upstream
       return { allowed: !!(data && data.allowed), intent: data && data.intent, reason: data && data.message };
+=======
+      if (res.ok && data && data.allowed === true) {
+        const loginEmail = ((ctx && ctx.email) || process.env.API_LOGIN_EMAIL_FALLBACK || '').trim();
+        if (loginEmail) {
+          const refreshedToken = await loginAndGetToken(loginEmail);
+          tokenCacheByEmail.set(loginEmail, refreshedToken);
+          console.log('[checkMenuEligibility] login token refreshed after eligibility success');
+        }
+      }
+      return {
+        allowed: !!(data && data.allowed),
+        intent: data && data.intent,
+        reason: data && data.message,
+        form: data && data.form,
+        semantic_prefill: data && data.semantic_prefill
+      };
+>>>>>>> Stashed changes
     } catch (e) {
       console.error('[checkMenuEligibility] error:', e);
       return { allowed: false, reason: 'eligibility check failed' };
@@ -207,6 +239,11 @@ async function getJdByRoleAndDept(roleId, departmentId, email, flowSource) {
   if (!Agent_API) throw new Error('API_BASE_URL not configured');
   const url = `${Agent_API}/job-description?role_id=${encodeURIComponent(roleId)}&department_id=${encodeURIComponent(departmentId)}`;
   const headers = await getApiHeaders(email);
+<<<<<<< Updated upstream
+=======
+  
+  console.log('[getJdByRoleAndDept] headers:', JSON.stringify(headers));
+>>>>>>> Stashed changes
   console.log('[getJdByRoleAndDept] GET', url, { flowSource });
   const res = await fetch(url, { method: 'GET', headers });
   console.log('[getJdByRoleAndDept] status:', res.status, { flowSource });
@@ -287,7 +324,11 @@ async function createJD(payload, email, flowSource) {
   const body = { email, ...payload };
   const url = `${Agent_API}/workflow-payload`;
   const headers = await getApiHeaders(email);
+<<<<<<< Updated upstream
   console.log('[createJD] POST', url, { flowSource });
+=======
+  console.log('[createJD] POST', url, { flowSource },headers);
+>>>>>>> Stashed changes
   console.log('[createJD] payload:', JSON.stringify(body, null, 2));
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   console.log('[createJD] status:', res.status, { flowSource });
