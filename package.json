@@ -8,8 +8,12 @@
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@azure/identity": "^4.10.1",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "axios": "^1.13.6",
     "botbuilder": "^4.22.2",
     "restify": "^11.1.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "isomorphic-fetch": "^3.0.0"
   }
 }

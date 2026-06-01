@@ -22,6 +22,16 @@ const {
     createJD
 } = require('./services/apiService');
 
+const {
+    parseScheduleCommand,
+    parseResponseQuery,
+    scheduleInterview,
+    getInterviewResponses,
+    getCandidateList,
+    findCandidateByName,
+    createDateAtTime
+} = require('./services/interviewScheduler');
+
 async function closeSourceCard(context) {
     const targetId = context.activity.replyToId || context.activity.id;
     if (!targetId) return;
@@ -592,6 +602,67 @@ class EchoBot extends ActivityHandler {
 
             if (!eligibility || eligibility.allowed !== true) {
                 await context.sendActivity(MessageFactory.text((eligibility && eligibility.reason) || 'You are not allowed to start the JD process at this time.'));
+                await next();
+                return;
+            }
+
+            // Check for interview scheduling commands first (before intent check)
+            const scheduleDetails = parseScheduleCommand(userText);
+
+            if (scheduleDetails) {
+                if (scheduleDetails.error) {
+                    await context.sendActivity(MessageFactory.text(scheduleDetails.error));
+                    await next();
+                    return;
+                }
+
+                const durationMinutes = scheduleDetails.durationMinutes;
+                const timeText = scheduleDetails.timeText;
+                const candidateName = scheduleDetails.candidateName;
+                const interviewerEmail = scheduleDetails.interviewerEmail;
+                const startTime = createDateAtTime(timeText, scheduleDetails.dayOffset);
+
+                if (!startTime) {
+                    await context.sendActivity(MessageFactory.text('Invalid time format. Example: 5:00 PM'));
+                    await next();
+                    return;
+                }
+
+                const candidate = findCandidateByName(candidateName);
+                if (!candidate) {
+                    await context.sendActivity(MessageFactory.text(`Candidate '${candidateName}' not found. Ask 'candidate list' to see available names.`));
+                    await next();
+                    return;
+                }
+
+                const result = await scheduleInterview(candidate, startTime, {
+                    durationMinutes,
+                    timezone: scheduleDetails.timezone,
+                    interviewerEmail
+                });
+
+                await context.sendActivity(MessageFactory.text(result));
+                await next();
+                return;
+            }
+
+            const responseQuery = parseResponseQuery(userText);
+            if (responseQuery) {
+                if (responseQuery.error) {
+                    await context.sendActivity(MessageFactory.text(responseQuery.error));
+                    await next();
+                    return;
+                }
+
+                const result = await getInterviewResponses(responseQuery.candidateName);
+                await context.sendActivity(MessageFactory.text(result));
+                await next();
+                return;
+            }
+
+            if (userText.toLowerCase().includes('candidate list')) {
+                const result = await getCandidateList();
+                await context.sendActivity(MessageFactory.text(result));
                 await next();
                 return;
             }

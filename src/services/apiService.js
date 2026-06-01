@@ -95,9 +95,27 @@ async function loginForDataApi(email, flowSource) {
   await getApiHeaders(email);
 }
 
+// function normalizeList(data, idKeys = ['id'], nameKeys = ['name']) {
+//   const pick = (obj, keys) => keys.find((k) => obj && Object.prototype.hasOwnProperty.call(obj, k));
+//   const arr = Array.isArray(data) ? data : (data && Array.isArray(data.records) ? data.records : []);
+//   if (!Array.isArray(arr)) return [];
+//   return arr
+//     .map((x) => {
+//       const idKey = pick(x, idKeys);
+//       const nameKey = pick(x, nameKeys);
+//       const id = idKey ? x[idKey] : undefined;
+//       const name = nameKey ? x[nameKey] : undefined;
+//       return { id: id !== undefined && id !== null ? String(id) : '', name: name !== undefined && name !== null ? String(name) : '' };
+//     })
+//     .filter((i) => i.id && i.name);
+// }
+
 function normalizeList(data, idKeys = ['id'], nameKeys = ['name']) {
   const pick = (obj, keys) => keys.find((k) => obj && Object.prototype.hasOwnProperty.call(obj, k));
-  const arr = Array.isArray(data) ? data : (data && Array.isArray(data.records) ? data.records : []);
+ 
+  const unwrapped = data && Array.isArray(data.data) ? data.data : data;
+  const arr = Array.isArray(unwrapped) ? unwrapped : (unwrapped && Array.isArray(unwrapped.records) ? unwrapped.records : []);
+  
   if (!Array.isArray(arr)) return [];
   return arr
     .map((x) => {
@@ -164,6 +182,12 @@ async function checkMenuEligibility(ctx) {
   return { allowed: true };
 }
 
+// async function getDepartments(email, flowSource) {
+//   if (!Agent_API) throw new Error('API_BASE_URL not configured');
+//   const data = await apiGet('/departments', email);
+//   const list = normalizeList(data, ['id', 'department_id', 'value', 'Id'], ['department', 'name', 'department_name', 'title', 'Name']);
+//   return list;
+// }
 async function getDepartments(email, flowSource) {
   if (!Agent_API) throw new Error('API_BASE_URL not configured');
   const data = await apiGet('/departments', email);
@@ -171,11 +195,22 @@ async function getDepartments(email, flowSource) {
   return list;
 }
 
+// async function getRolesByDepartment(departmentId, email, flowSource) {
+//   if (!Agent_API) throw new Error('API_BASE_URL not configured');
+//   const raw = await apiGet('/roles', email);
+//   let arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []);
+//   if (departmentId && Array.isArray(arr)) {
+//     const depKey = (r) => r.departmentId || r.department_id || r.deptId || r.dept_id;
+//     const filtered = arr.filter((r) => String(depKey(r)) === String(departmentId));
+//     if (filtered.length) arr = filtered;
+//   }
+//   const list = normalizeList(arr, ['id', 'role_id', 'value', 'Id'], ['role', 'role_name', 'name', 'title', 'Name']);
+//   return list;
+// }
 async function getRolesByDepartment(departmentId, email, flowSource) {
   if (!Agent_API) throw new Error('API_BASE_URL not configured');
   const raw = await apiGet('/roles', email);
-  let arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []);
-  // If departmentId is provided and API returns dept linkage, try to filter client-side
+  let arr = Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []));
   if (departmentId && Array.isArray(arr)) {
     const depKey = (r) => r.departmentId || r.department_id || r.deptId || r.dept_id;
     const filtered = arr.filter((r) => String(depKey(r)) === String(departmentId));
@@ -185,10 +220,23 @@ async function getRolesByDepartment(departmentId, email, flowSource) {
   return list;
 }
 
+// async function getCollabMembers(email, flowSource) {
+//   if (!Agent_API) throw new Error('API_BASE_URL not configured');
+//   const raw = await apiGet('/originators', email);
+//   const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []);
+//   const out = arr.map((m) => {
+//     const full = [m.firstname, m.lastname].filter(Boolean).join(' ').trim();
+//     const name = full || m.full_name || m.name || '';
+//     const id = m && (m.id ?? m.user_id ?? m.Id);
+//     return { id: id != null ? String(id) : '', name };
+//   }).filter((i) => i.id && i.name);
+//   return out;
+// }
+
 async function getCollabMembers(email, flowSource) {
   if (!Agent_API) throw new Error('API_BASE_URL not configured');
   const raw = await apiGet('/originators', email);
-  const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []);
+  const arr = Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : (raw && Array.isArray(raw.records) ? raw.records : []));
   const out = arr.map((m) => {
     const full = [m.firstname, m.lastname].filter(Boolean).join(' ').trim();
     const name = full || m.full_name || m.name || '';

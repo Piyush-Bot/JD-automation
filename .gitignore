@@ -3,6 +3,7 @@ node_modules/
 server_validation_guide.md
 
 SampleJSON/
+llm-bot/
 
 # Environment files
 .env
